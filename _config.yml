@@ -9,7 +9,8 @@ permalink:        pretty
 title:            Hoa Mai
 description:      'DevOps Engineer'
 url:              https://hoadinhmai.github.io
-baseurl:          /
+baseurl:          
+# https://github.com/github/pages-gem/issues/460
 
 author:
   name:           'Hoa Mai'
