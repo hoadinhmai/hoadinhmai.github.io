@@ -1,0 +1,26 @@
+# Dependencies
+markdown:         redcarpet
+highlighter:      pygments
+
+# Permalinks
+permalink:        pretty
+
+# Setup
+title:            Hoa Mai
+description:      'DevOps Engineer'
+url:              https://hdm.cloud
+baseurl:          /
+
+author:
+  name:           'Hoa Mai'
+  url:            https://hdm.cloud
+
+plugins:
+  - jekyll-paginate
+paginate:         5
+
+# Custom vars
+version:          2.1.0
+
+github:
+  repo:           https://github.com/hoadinhmai/hoadinhmai.github.io
