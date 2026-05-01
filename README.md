@@ -1,19 +1,15 @@
 # hoadinhmai.github.io
 
-Experimental blog website using Jekyll Hyde theme.
+Personal landing page for [hoamai.click](https://hoamai.click), served via GitHub Pages.
 
-## Theme
+A single-page card with links to GitHub and LinkedIn — no build step, no dependencies.
 
-Hyde is a theme built on top of [Poole](https://github.com/poole/poole), which provides a fully furnished Jekyll setup—just download and start the Jekyll server. See [the Poole usage guidelines](https://github.com/poole/poole#usage) for how to install and use Jekyll.
+## Stack
 
-## Usage
+- Plain HTML/CSS (`index.html`)
+- `.nojekyll` — Jekyll processing disabled
+- Custom domain: `hoamai.click` (DNS managed via DNSControl → Route53)
 
-#### macOS
+## Local preview
 
-```
-$ git clone https://github.com/hoadinhmai/hoadinhmai.github.io.git && cd hoadinhmai.github.io
-$ brew install ruby
-$ gem install jekyll
-$ jekyll serve
-```
-Access the site on [http://localhost:4000/](http://localhost:4000/)
+Open `index.html` directly in a browser — no server required.
