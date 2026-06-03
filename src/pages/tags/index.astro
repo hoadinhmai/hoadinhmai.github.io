@@ -1,0 +1,21 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import TagPill from '../../components/TagPill.astro';
+import { getAllTags } from '../../utils/posts';
+
+const tags = getAllTags(await getCollection('blog'));
+---
+
+<BaseLayout title="Tags — Hoa Mai">
+  <h1 style="font-size:2rem;margin-bottom:2rem;">Tags</h1>
+  {tags.length === 0 ? (
+    <p style="color:var(--muted);">No tags yet.</p>
+  ) : (
+    <ul style="list-style:none;line-height:2.4;">
+      {tags.map(({ tag, count }) => (
+        <li><TagPill tag={tag} /> <span class="mono">{count}</span></li>
+      ))}
+    </ul>
+  )}
+</BaseLayout>

@@ -1,0 +1,11 @@
+# Brainstorm visual-companion scratch files
+.superpowers/
+
+# Local design/spec docs (not tracked)
+docs/
+
+# Node / Astro
+node_modules/
+dist/
+.astro/
+*.log
