@@ -1,15 +1,32 @@
 # hoadinhmai.github.io
 
-Personal landing page for [hoamai.click](https://hoamai.click), served via GitHub Pages.
-
-A single-page card with links to GitHub and LinkedIn — no build step, no dependencies.
+Personal site and tech blog for [hoamai.click](https://hoamai.click), built with
+[Astro](https://astro.build) and deployed to GitHub Pages via GitHub Actions.
 
 ## Stack
 
-- Plain HTML/CSS (`index.html`)
-- `.nojekyll` — Jekyll processing disabled
-- Custom domain: `hoamai.click` (DNS managed via DNSControl → Route53)
+- Astro 5 (static output) + MDX
+- Content collection for posts (`src/content/blog/*.mdx`)
+- Light/dark theme, Shiki code highlighting
+- Custom domain `hoamai.click` (DNS via DNSControl → Route53)
 
-## Local preview
+## Develop
 
-Open `index.html` directly in a browser — no server required.
+```bash
+npm install
+npm run dev      # local dev server
+npm run check    # type + content validation
+npm test         # unit tests (vitest)
+npm run build    # production build to dist/
+```
+
+## Writing a post
+
+Add a Markdown/MDX file under `src/content/blog/` with frontmatter:
+`title`, `description`, `pubDate`, `tags` (array), `draft` (bool).
+
+## Deploy
+
+Push to the default branch — the `Deploy to GitHub Pages` Action builds and
+publishes automatically. (Pages Source must be set to "GitHub Actions" in repo
+settings.)

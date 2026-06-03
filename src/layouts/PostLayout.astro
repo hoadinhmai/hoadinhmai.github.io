@@ -1,0 +1,42 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import TagPill from '../components/TagPill.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  pubDate: Date;
+  tags: string[];
+}
+const { title, description, pubDate, tags } = Astro.props;
+const formatted = pubDate.toLocaleDateString('en-US', {
+  year: 'numeric', month: 'long', day: 'numeric',
+});
+---
+
+<BaseLayout title={`${title} — Hoa Mai`} description={description}>
+  <article>
+    <h1 style="font-size:2rem;">{title}</h1>
+    <p style="margin-top:0.5rem;margin-bottom:1.5rem;">
+      <time datetime={pubDate.toISOString()}>{formatted}</time>
+      {tags.length > 0 && <span style="margin-left:0.5rem;">{tags.map((t) => <TagPill tag={t} />)}</span>}
+    </p>
+    <div style="line-height:1.75;">
+      <slot />
+    </div>
+  </article>
+  <p style="margin-top:2.5rem;"><a href="/blog" class="mono">← All posts</a></p>
+</BaseLayout>
+
+<style is:global>
+  article h2 { font-size: 1.5rem; margin: 2rem 0 0.75rem; }
+  article p { margin-bottom: 1rem; }
+  article ul, article ol { margin: 0 0 1rem 1.5rem; }
+  article :not(pre) > code {
+    font-family: var(--mono);
+    font-size: 0.85em;
+    background: var(--rule);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+</style>
