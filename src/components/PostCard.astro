@@ -1,0 +1,35 @@
+---
+import TagPill from './TagPill.astro';
+
+interface Props {
+  slug: string;
+  title: string;
+  description: string;
+  pubDate: Date;
+  tags: string[];
+}
+const { slug, title, description, pubDate, tags } = Astro.props;
+const formatted = pubDate.toLocaleDateString('en-US', {
+  year: 'numeric', month: 'long', day: 'numeric',
+});
+---
+
+<article class="card" style="margin-bottom:1.25rem;">
+  <h2 class="post-title" style="font-size:1.4rem;">
+    <a href={`/blog/${slug}`}>{title}</a>
+  </h2>
+  <p style="color:var(--muted);margin-top:0.35rem;">{description}</p>
+  <p style="margin-top:0.6rem;">
+    <time datetime={pubDate.toISOString()}>{formatted}</time>
+    {tags.length > 0 && <span style="margin-left:0.5rem;">{tags.map((t) => <TagPill tag={t} />)}</span>}
+  </p>
+</article>
+
+<style>
+  .post-title a {
+    color: var(--ink);
+    text-decoration: none;
+    transition: color 0.15s ease;
+  }
+  .post-title a:hover { color: var(--accent); }
+</style>

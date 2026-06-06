@@ -1,0 +1,6 @@
+---
+interface Props { tag: string; }
+const { tag } = Astro.props;
+---
+
+<a href={`/tags/${tag}`} class="pill mono" style="margin-right:0.35rem;">#{tag}</a>
