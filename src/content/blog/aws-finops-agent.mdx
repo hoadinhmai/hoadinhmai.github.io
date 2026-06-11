@@ -1,0 +1,101 @@
+---
+title: "AWS FinOps Agent and the cost alert triage gap"
+description: "Cost Anomaly Detection tells you something spiked. It doesn't tell you what changed, who changed it, or who to contact. AWS FinOps Agent automates that investigation loop."
+pubDate: 2026-06-12
+tags: ["aws", "finops", "cloud"]
+draft: false
+---
+
+Cost Anomaly Detection fires. An alert lands in your inbox: service X in account Y is
+up 40% over baseline. Someone has to figure out what changed, who changed it, and who
+to contact. That means opening CloudTrail, narrowing down API events by time and
+resource, cross-referencing resource IDs against tag ownership, and writing up a
+summary before filing a ticket.
+
+Minimum 30 minutes per alert, assuming the person knows what they're looking for. At
+scale, this either becomes the FinOps team's full-time job or it doesn't get done
+consistently.
+
+AWS FinOps Agent (currently in public preview) is designed to automate that
+investigation loop. Here's what it actually does.
+
+## The manual triage problem, made concrete
+
+Cost Anomaly Detection is good at detecting. It tells you a service spiked by a given
+percentage over a baseline, which account it happened in, and roughly when. What it
+does not tell you: which specific resource caused it, what API call triggered the cost
+increase, which team deployed it, or who to page.
+
+To answer those questions you need at least three consoles. Cost Explorer narrows the
+service to a specific resource type or tag group. CloudTrail shows recent API activity
+correlated to that time window: RunInstances, CreateTable, PutBucketLifecycleConfiguration,
+whatever fits the service. Then you match resource IDs back to ownership via tags, a
+spreadsheet, or tribal knowledge.
+
+That process requires domain knowledge about which CloudTrail events correlate with
+cost increases for different services. It is inconsistently applied across teams, and
+in most organisations it quietly falls to whoever has the FinOps background to do it
+efficiently.
+
+## What FinOps Agent does
+
+### Anomaly investigation
+
+When Cost Anomaly Detection fires, the agent correlates the cost change with CloudTrail
+events to identify the root cause. It then opens a Jira ticket or posts a Slack
+notification with the investigation summary, routed to the team or individual
+responsible for the resource.
+
+The routing relies on context files that you upload when configuring the agent:
+account-to-team mappings, tagging conventions, org structure. The agent uses this to
+send findings to the right people rather than a generic cost alert channel. Without
+that context, it still produces the investigation; it just cannot address the output
+as precisely.
+
+### Natural language cost queries
+
+Engineers can ask questions about costs in plain English: "Why did our RDS spend
+increase last week?" or "Which team drove the EC2 cost increase in us-east-1 this
+month?" The agent queries Cost Explorer and usage data and responds with an explanation.
+
+This removes the requirement for every engineer who wants a cost answer to know how to
+build Cost Explorer queries or interpret usage reports. The investigation stays with
+the person asking rather than bouncing to a FinOps specialist.
+
+### Scheduled reporting
+
+The agent generates recurring cost reports on custom schedules (daily, weekly, monthly)
+in HTML, PDF, or PowerPoint format. These can be scoped per team, per account, or per
+service. Teams that currently build these reports manually or pull them from Athena
+queries get a path to automate the output without maintaining custom tooling.
+
+### Optimization recommendations as Jira tickets
+
+The agent pulls findings from Cost Optimization Hub and Compute Optimizer and
+summarises them as Jira tickets. Instead of a recommendations dashboard that teams
+need to actively check, findings become work items in the backlog. This closes the
+loop between a recommendation existing and someone being assigned to act on it.
+
+## What needs to be in place
+
+The quality of the agent's investigations depends on the underlying services being
+properly configured. Cost Anomaly Detection monitors need to exist for the accounts
+and services you want covered. CloudTrail must be enabled in the relevant regions.
+Resource tagging needs to be consistent enough for the agent to correlate costs back
+to teams.
+
+If tagging is inconsistent or CloudTrail is not enabled everywhere, the agent will
+still run, but root cause findings will be incomplete and routing will be approximate.
+Getting these foundations right is a prerequisite, not a side effect of deploying the
+agent.
+
+## When to evaluate it
+
+If your team spends meaningful time each week triaging cost alerts manually, or if
+anomaly alerts routinely go uninvestigated because nobody can prioritise the digging,
+this is worth a pilot. The Slack and Jira integrations mean the output lands where
+engineers already work rather than requiring a new tool to be adopted.
+
+FinOps Agent is in public preview so the feature set will change. The pattern it
+represents is sound: automation of the investigation work that currently sits between
+the alert and the ticket.
