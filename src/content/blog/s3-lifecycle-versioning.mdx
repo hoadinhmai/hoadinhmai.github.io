@@ -1,0 +1,123 @@
+---
+title: "S3 lifecycle rules and the delete marker trap"
+description: "Configuring expiration on a versioned S3 bucket isn't the same as deleting objects. Here's what a complete lifecycle configuration actually looks like."
+pubDate: 2026-06-12
+tags: ["aws", "s3"]
+draft: false
+---
+
+You added a 30-day expiration rule to your versioned S3 bucket. A month later,
+storage hasn't budged. The rule is there, status is Enabled. So what's going on?
+
+Expiration on a versioned bucket doesn't delete objects. It creates delete markers.
+A delete marker isn't a deletion. It just makes the object look gone. Understanding the difference is
+what makes a lifecycle configuration actually work.
+
+## How versioning stores objects
+
+Every `PUT` to a versioned bucket creates a new version with a unique version ID.
+The previous version becomes *noncurrent*, no longer returned by `GetObject` or
+`ListObjectsV2`, but still stored and still billed.
+
+A `DELETE` without a version ID doesn't remove anything either. S3 creates a *delete
+marker*: a zero-byte record with its own version ID. The marker becomes the "current
+version" of the object. Standard list and get operations see the marker, treat the
+object as deleted, and return nothing. The actual object, along with every noncurrent
+version before it, remains on disk and on your bill.
+
+`ListObjectVersions` is the only API call that shows the full picture. On a bucket
+that's been running for months without a complete lifecycle policy, the output often
+turns up dozens of noncurrent versions per key and a graveyard of orphaned delete
+markers. None of that shows up in the console's default object view.
+
+To permanently remove a specific version you need a `DELETE` request with the exact
+version ID. That's a hard delete. Lifecycle rules are how you automate hard deletes at
+scale without writing cleanup scripts.
+
+## The four rules a versioned bucket needs
+
+A complete lifecycle configuration handles four distinct cases. Most configurations
+only cover the first one.
+
+| Rule | What it acts on | What it does |
+|---|---|---|
+| `ExpirationInDays` | Current version | Creates a delete marker after N days |
+| `NoncurrentVersionExpiration` | Noncurrent versions | Hard-deletes old versions after N days |
+| `ExpiredObjectDeleteMarker` | Expired delete markers | Removes markers with no noncurrent versions beneath them |
+| `AbortIncompleteMultipartUpload` | In-progress upload parts | Purges orphaned parts after N days |
+
+Without the second rule, every overwritten or expired object leaves a chain of
+noncurrent versions that accumulates forever. Without the third, delete markers pile
+up, not expensive individually, but they add noise to `ListObjectVersions` and can
+mask storage you've forgotten about. Without the fourth, stalled multipart uploads
+from interrupted transfers or buggy clients quietly bill you for parts that will never
+assemble into a complete object.
+
+Here's a complete CloudFormation example scoped to the `logs/` prefix:
+
+```yaml
+Type: AWS::S3::Bucket
+Properties:
+  VersioningConfiguration:
+    Status: Enabled
+  LifecycleConfiguration:
+    Rules:
+      # Expire current log versions after 30 days (creates a delete marker),
+      # then hard-delete noncurrent versions after 90 days.
+      - Id: expire-logs
+        Status: Enabled
+        Prefix: logs/
+        ExpirationInDays: 30
+        NoncurrentVersionExpiration:
+          NoncurrentDays: 90
+
+      # Remove expired delete markers (those with no remaining noncurrent versions).
+      # This rule cannot have a Prefix or tag filter.
+      - Id: cleanup-delete-markers
+        Status: Enabled
+        ExpiredObjectDeleteMarker: true
+
+      # Delete parts from uploads that never completed.
+      - Id: abort-incomplete-mpu
+        Status: Enabled
+        AbortIncompleteMultipartUpload:
+          DaysAfterInitiation: 7
+```
+
+Notice that `cleanup-delete-markers` has no `Prefix`. That's not an oversight.
+
+## Why the delete marker rule can't have a filter
+
+`ExpiredObjectDeleteMarker: true` cannot appear in the same rule as a `Prefix` or
+tag filter. AWS will reject the configuration with a validation error if you try.
+
+The reason: a delete marker is only *expired* when it's the latest version of an
+object and there are no noncurrent versions beneath it. A prefix-scoped cleanup rule
+would need to reason about noncurrent version state under that prefix, but lifecycle
+rule evaluation doesn't work that way. Each rule is evaluated independently. AWS's
+solution is to disallow the filter on that rule entirely, making it apply bucket-wide.
+
+In practice, if you have multiple prefix-scoped expiration rules (`logs/`, `exports/`,
+`tmp/`) they all share a single unscoped delete marker cleanup rule. One rule covers
+all prefixes, and that's fine.
+
+If you try to add a prefix anyway, `aws cloudformation deploy` or
+`put-bucket-lifecycle-configuration` will fail with an `InvalidRequest` error pointing
+at the conflicting rule.
+
+## What to check on existing buckets
+
+If you have versioned buckets that have been running without a complete lifecycle policy:
+
+- Run `ListObjectVersions` to find accumulated noncurrent versions. Sort by
+  `LastModified` to find the oldest ones first. Those are usually the bulk of the cost.
+- Look for delete markers where `IsLatest: true` with noncurrent versions below them.
+  Those are objects that appear deleted but are still billed.
+- Look for delete markers where `IsLatest: true` with *no* noncurrent versions below
+  them. Those are expired markers. The cleanup rule will remove them once deployed.
+- Check the S3 console under **Metrics → Storage Lens** for the
+  *Incomplete multipart upload bytes* metric. Non-zero means stalled uploads are
+  accumulating.
+
+S3 evaluates lifecycle rules once per day. After deploying a corrected configuration,
+expect 24–48 hours before storage starts trending down.
