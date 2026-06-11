@@ -1,0 +1,138 @@
+---
+title: "Why your CloudFormation tenant offboarding leaves EC2 instances running"
+description: "Deleting a CloudFormation stack isn't the same as terminating its EC2 instances. Here's the failure chain that orphans instances after tenant offboarding, and the three fixes."
+pubDate: 2026-06-12
+tags: ["aws", "cloudformation", "ec2"]
+draft: false
+---
+
+Your offboarding job ran. The dashboard says the tenant is gone. Three weeks later, you
+find EC2 instances running in your account with no stack to attribute them to. Here's how
+that happens.
+
+## The setup
+
+In a multi-tenant SaaS environment, a common pattern is one CloudFormation stack per tenant
+covering the full 3-tier architecture: an ALB for the web tier, an ASG with EC2 instances
+for the app tier, and RDS for the data tier. Onboarding creates the stack; offboarding
+deletes it.
+
+Scale-in protection on the app tier instances is standard practice. It prevents the ASG
+from terminating an instance that's mid-deployment or running a long job. In CloudFormation,
+it looks like this:
+
+```yaml
+AppTierASG:
+  Type: AWS::AutoScaling::AutoScalingGroup
+  Properties:
+    NewInstancesProtectedFromScaleIn: true
+    DesiredCapacity: 2
+    MinSize: 1
+    MaxSize: 4
+```
+
+This is the right call operationally. It's also what breaks teardown.
+
+## The failure chain
+
+When CloudFormation deletes an ASG resource, it doesn't send a terminate signal to each
+instance directly. It sets `DesiredCapacity` to 0 and waits for the ASG to drain itself
+by terminating instances through its own scale-in logic.
+
+Scale-in logic respects instance protection. An ASG will not terminate an instance with
+`ProtectedFromScaleIn: true`. So CloudFormation sets desired to 0, the ASG acknowledges
+the change, and then nothing happens. The instances sit there, protected, while
+CloudFormation waits.
+
+The default resource deletion wait is up to an hour. After that, the resource deletion
+times out and the stack enters `DELETE_FAILED`. The in-house offboarding tooling called
+`DeleteStack` and moved on. The `DeleteStack` API call returns immediately, the tooling
+marks the job complete, and nobody is watching.
+
+The instances keep running. They no longer belong to any stack, so they carry no tenant
+tag context. They show up in EC2 cost reports as unattributed compute. Depending on how
+many tenants have been offboarded this way, the discrepancy compounds quietly.
+
+## The three fixes
+
+These work best together. Any one of them in isolation leaves a gap.
+
+### 1. Strip scale-in protection before calling DeleteStack
+
+The offboarding tooling needs a pre-deletion step that removes `ProtectedFromScaleIn`
+from every instance in the tenant's ASG before the stack delete is triggered.
+
+```bash
+# Retrieve instance IDs from the tenant's ASG
+INSTANCE_IDS=$(aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-names "tenant-xyz-app-asg" \
+  --query 'AutoScalingGroups[0].Instances[*].InstanceId' \
+  --output text)
+
+# Remove scale-in protection so the ASG can drain
+aws autoscaling set-instance-protection \
+  --auto-scaling-group-name "tenant-xyz-app-asg" \
+  --instance-ids $INSTANCE_IDS \
+  --protected-from-scale-in false
+
+# Now CloudFormation can complete the delete
+aws cloudformation delete-stack --stack-name "tenant-xyz"
+```
+
+This removes the blocker before CloudFormation ever hits it.
+
+### 2. Update the stack to drain the ASG before deleting it
+
+Rather than going straight to deletion, the offboarding flow can issue a stack update
+first that sets `DesiredCapacity: 0` and `NewInstancesProtectedFromScaleIn: false`. Once
+the update completes and the ASG is empty, the stack delete has nothing to block on.
+
+This avoids needing to know the ASG name in the tooling. CloudFormation handles the drain
+as part of the update, and the tooling just waits for `UPDATE_COMPLETE` before proceeding
+to deletion.
+
+It also makes teardown auditable: you get a CloudFormation event trail showing the drain
+update and the subsequent delete as two distinct operations, both with a clear status.
+
+### 3. Poll for DELETE_COMPLETE, not just the API response
+
+`DeleteStack` returns immediately. It starts the deletion process; it doesn't confirm it.
+Offboarding tooling that treats the API response as confirmation of completion is always
+racing against the actual teardown.
+
+The tooling should block on the final stack state:
+
+```bash
+# Block until the stack is fully deleted or fails
+aws cloudformation wait stack-delete-complete \
+  --stack-name "tenant-xyz"
+
+# wait exits non-zero on DELETE_FAILED
+if [ $? -ne 0 ]; then
+  echo "Stack deletion failed. Blocked resources:"
+  aws cloudformation describe-stack-resources \
+    --stack-name "tenant-xyz" \
+    --query 'StackResources[?ResourceStatus==`DELETE_FAILED`].{Resource:LogicalResourceId,Reason:ResourceStatusReason}' \
+    --output table
+  exit 1
+fi
+```
+
+On `DELETE_FAILED`, surface the specific resources that blocked deletion and halt the
+offboarding job. A failed offboarding should never silently close.
+
+## What to audit on existing pipelines
+
+If you've been running tenant offboarding without these checks in place:
+
+- Query EC2 for running instances with no `aws:cloudformation:stack-name` tag. Any hit
+  is potentially an orphaned instance from a failed stack deletion.
+- Check your CloudFormation stacks for any in `DELETE_FAILED` state. These are
+  offboardings that failed and were never retried.
+- Review your offboarding tooling for `delete-stack` calls not followed by a
+  `wait stack-delete-complete` or equivalent polling.
+- For each tenant stack that includes an ASG, confirm that stripping scale-in protection
+  is part of the offboarding runbook or automation.
+
+Failed teardowns don't announce themselves. The only reliable signal is a reconciliation
+step that cross-references running compute against active stacks.
