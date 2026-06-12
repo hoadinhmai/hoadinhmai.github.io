@@ -1,0 +1,283 @@
+---
+title: "WAF shared rule groups without Firewall Manager"
+description: "How to centralise WAF rules across 20 accounts using shared rule groups and PutPermissionPolicy when Firewall Manager is not an option."
+pubDate: 2026-06-13
+tags: ["aws", "waf", "security"]
+draft: false
+---
+
+CloudWatch alarms fire on unusual spikes across your public-facing API endpoints. You dig
+into the traffic and most of it is not legitimate: bad actors scanning for vulnerabilities
+to exploit. Your security team did not catch this. You did.
+
+You check the WAF rules and they look right in this account. Then you check another. And
+another. The rules have drifted. Some accounts are missing the rate limit. A few never
+got the IP blocklist update from last quarter.
+
+The problem is not that WAF rules are hard to write. The problem is that there are twenty
+copies of them.
+
+## Why not Firewall Manager?
+
+AWS Firewall Manager is the intended answer: one place to define WAF policies, automatic
+propagation across accounts. But FM requires a delegated administrator account, specific
+AWS Organizations configuration, and in practice, access to the service is often
+controlled by a central cloud security function that is not resourced to support every
+team's use case. If you are waiting on FM, this post is for you.
+
+## How shared rule groups work
+
+The account that owns the rule group is the producer. Accounts that reference it in their
+WebACLs are consumers. To grant consumers access, the producer calls
+`PutPermissionPolicy`, which attaches a resource-based IAM policy directly to the rule
+group. Once that policy is in place, consumer accounts can call `GetRuleGroup` and
+reference the ARN in `CreateWebACL` or `UpdateWebACL`. Shared rule groups do not appear
+in the consumer's WAF console, but they work normally in WebACLs.
+
+When the producer updates the rule group, the change is immediately visible to all
+consumers. No consumer-side action required. The ARN does not change.
+
+One constraint worth knowing upfront: WAF resources are regional. A rule group created in
+`us-east-1` cannot be referenced by a WebACL in `eu-west-1`. Teams with multi-region
+deployments need a rule group per region.
+
+## Setting up the producer account
+
+The producer creates an IPset and a rule group that references it. CloudFormation handles
+both resources, but there is no native `AWS::WAFv2::PermissionPolicy` resource type. The
+`PutPermissionPolicy` call must happen outside the CloudFormation resource graph: either
+as a post-deploy CLI step or as a Lambda-backed custom resource in the same stack.
+
+**The CloudFormation resources:**
+
+```yaml
+Parameters:
+  OrganizationId:
+    Type: String
+    Description: AWS Organizations ID (o-xxxxxxxxxx)
+
+Resources:
+  IPBlocklist:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Name: shared-ip-blocklist
+      Scope: REGIONAL
+      IPAddressVersion: IPV4
+      Addresses:
+        - 192.0.2.0/24
+
+  SharedRuleGroup:
+    Type: AWS::WAFv2::RuleGroup
+    Properties:
+      Name: shared-security-rules
+      Scope: REGIONAL
+      Capacity: 100
+      Rules:
+        - Name: block-known-bad-ips
+          Priority: 0
+          Statement:
+            IPSetReferenceStatement:
+              ARN: !GetAtt IPBlocklist.Arn
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: block-known-bad-ips
+        - Name: rate-limit-by-ip
+          Priority: 1
+          Statement:
+            RateBasedStatement:
+              Limit: 1000
+              AggregateKeyType: IP
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: rate-limit-by-ip
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: shared-security-rules
+
+Outputs:
+  RuleGroupArn:
+    Value: !GetAtt SharedRuleGroup.Arn
+    Description: Pass this ARN to consumer account WebACL stacks
+```
+
+`Capacity` is fixed at creation and cannot be changed without replacing the resource.
+Size it for the rules you expect to add over time. The value is deducted from each
+consumer WebACL's capacity budget (1500 WCU by default).
+
+**Option 1: Apply the permission policy via CLI**
+
+```bash
+aws wafv2 put-permission-policy \
+  --resource-arn <RuleGroupArn from stack output> \
+  --policy file://waf-policy.json \
+  --region us-east-1
+```
+
+`waf-policy.json`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": "*",
+    "Action": [
+      "wafv2:CreateWebACL",
+      "wafv2:UpdateWebACL",
+      "wafv2:PutFirewallManagerRuleGroups"
+    ],
+    "Condition": {
+      "StringEquals": {
+        "aws:PrincipalOrgID": "o-xxxxxxxxxx"
+      }
+    }
+  }]
+}
+```
+
+Two constraints enforced by the API: the policy must not include a `Resource` field, and
+the only allowed actions are those three plus an optional `wafv2:GetRuleGroup`. Any extra
+actions or wildcards will cause a `WAFInvalidPermissionPolicyException`.
+
+**Option 2: Lambda custom resource in the same stack**
+
+If you need the permission policy to be part of the CloudFormation lifecycle, add the
+following resources to the producer stack:
+
+```yaml
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: waf-permission-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - wafv2:PutPermissionPolicy
+                  - wafv2:DeletePermissionPolicy
+                Resource: !GetAtt SharedRuleGroup.Arn
+
+  PutPermissionPolicyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Runtime: python3.12
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import boto3, cfnresponse
+          def handler(event, context):
+            client = boto3.client('wafv2')
+            try:
+              if event['RequestType'] in ('Create', 'Update'):
+                client.put_permission_policy(
+                  ResourceArn=event['ResourceProperties']['ResourceArn'],
+                  Policy=event['ResourceProperties']['Policy']
+                )
+              elif event['RequestType'] == 'Delete':
+                client.delete_permission_policy(
+                  ResourceArn=event['ResourceProperties']['ResourceArn']
+                )
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+            except Exception as e:
+              cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  RuleGroupPolicy:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt PutPermissionPolicyFunction.Arn
+      ResourceArn: !GetAtt SharedRuleGroup.Arn
+      Policy: !Sub |
+        {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":["wafv2:CreateWebACL","wafv2:UpdateWebACL","wafv2:PutFirewallManagerRuleGroups"],"Condition":{"StringEquals":{"aws:PrincipalOrgID":"${OrganizationId}"}}}]}
+```
+
+The custom resource handles stack updates and deletes: a stack update re-applies the
+policy, and a stack delete calls `DeletePermissionPolicy` to clean up.
+
+## Referencing the shared rule group from a consumer account
+
+Consumer accounts do not create the rule group. They reference it by ARN in their own
+WebACL.
+
+```yaml
+Parameters:
+  SharedRuleGroupArn:
+    Type: String
+    Description: ARN of the shared WAF rule group from the producer account
+
+Resources:
+  WebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: my-web-acl
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      Rules:
+        - Name: shared-security-rules
+          Priority: 0
+          OverrideAction:
+            None: {}
+          Statement:
+            RuleGroupReferenceStatement:
+              ARN: !Ref SharedRuleGroupArn
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: shared-security-rules
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: my-web-acl
+```
+
+Rule group references use `OverrideAction`, not `Action`. Using `Action` here is a
+validation error that WAF will reject at deploy time. `OverrideAction: None: {}` means
+the rule group's own actions (Block, Count) apply as written.
+
+Pass `SharedRuleGroupArn` as a stack parameter. Teams typically store it in SSM
+Parameter Store and reference it with `AWS::SSM::Parameter::Value<String>` so stacks
+resolve it automatically at deploy time.
+
+## IPsets are where this pays off fast
+
+A rule group update requires a CloudFormation change. An IPset update does not: you can
+call `update-ip-set` directly and the new addresses are effective within seconds across
+all 20 accounts.
+
+This makes IPsets the first practical win for most teams. The security team maintains one
+blocklist. When threat intelligence publishes new CIDRs, one update propagates everywhere.
+The rule group does not change. The ARN does not change. Consumers do nothing.
+
+The same applies to allowlists. A shared IPset of partner IP ranges, maintained by the
+team that owns those integrations, means any account can reference it without duplicating
+the list. The IPset lives in the producer account; `PutPermissionPolicy` only covers rule
+groups, so consumers reach it exclusively through the shared rule group.
+
+## What to watch out for
+
+| Issue | Detail |
+|---|---|
+| Propagation is immediate | A bad rule update hits all consumers at once. Custom rule groups do not have versioning. Test in a non-production account before updating the shared group. |
+| WCU budget | The rule group's `Capacity` value is deducted from each consumer WebACL's 1500 WCU budget. If consumers have many additional rules, this can become a constraint. |
+| WebACL association is still manual | Shared rule groups do not attach themselves to resources. Each team must still associate their WebACL with their ALB, API Gateway, or CloudFront distribution. This is the one thing Firewall Manager automates that this pattern does not. |
+| Permission policy constraints | The policy attached via `PutPermissionPolicy` must not include a `Resource` field. Allowed actions are exactly `wafv2:CreateWebACL`, `wafv2:UpdateWebACL`, `wafv2:PutFirewallManagerRuleGroups`, and optionally `wafv2:GetRuleGroup`. Wildcards are rejected. |
