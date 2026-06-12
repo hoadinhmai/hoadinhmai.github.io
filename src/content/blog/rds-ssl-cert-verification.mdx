@@ -1,0 +1,172 @@
+---
+title: "RDS SSL/TLS certificates: how misconfigured client libraries leave you open to MITM"
+description: "sslmode='require' encrypts the connection but does not verify the server certificate. Here's why that matters, and the exact configuration that actually closes the gap."
+pubDate: 2026-06-13
+tags: ["aws", "rds", "security", "python"]
+draft: false
+---
+
+Your application connects to RDS over SSL. The connection is encrypted. You ticked the box.
+
+What most setups don't check: whether the client actually verifies the server's certificate. Encryption without certificate verification means an attacker on the network path can impersonate your database. The TLS handshake completes. Your application happily encrypts its queries and credentials and sends them to the wrong host.
+
+## Why the RDS CA cert is not in your container by default
+
+Amazon Linux 2 and AL2023 ship with the standard system CA bundle. The RDS CA is not in it.
+
+Amazon maintains a separate trust bundle for RDS and Aurora at `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`. This bundle covers all regions and all CA generations (`rds-ca-2019`, `rds-ca-rsa2048-g1`, `rds-ca-rsa4096-g1`, `rds-ca-ecc384-g1`). If you don't explicitly add it to your image, certificate verification will fail against the system store, so most libraries either skip verification silently or raise an error that developers work around by disabling it.
+
+## pg8000: the ssl_context trap
+
+pg8000 takes an `ssl_context` parameter. Two common patterns look safe and aren't.
+
+**Passing `True`:**
+
+```python
+conn = pg8000.connect(
+    host="mydb.cluster-xyz.us-east-1.rds.amazonaws.com",
+    database="mydb",
+    user="myuser",
+    password="...",
+    ssl_context=True,
+)
+```
+
+`ssl_context=True` tells pg8000 to create an `ssl.SSLContext` internally using `ssl.create_default_context()`. That loads the system CA bundle, not the RDS bundle. On a fresh AL2 or AL2023 container, verification fails, and the connection either errors or falls back to no verification depending on the server's `ssl` setting. The "fix" developers reach for is the second pattern.
+
+**Passing a custom SSLContext with verification disabled:**
+
+```python
+import ssl
+
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE  # wide open
+
+conn = pg8000.connect(..., ssl_context=ctx)
+```
+
+The connection is encrypted. Your logs show nothing unusual. The server identity is not verified.
+
+## SQLAlchemy: sslmode='require' is not enough
+
+SQLAlchemy with psycopg2 accepts PostgreSQL connection keywords via `connect_args`. A pattern that appears in a lot of production code:
+
+```python
+engine = create_engine(
+    "postgresql+psycopg2://user:password@host/db",
+    connect_args={"sslmode": "require"},
+)
+```
+
+`sslmode='require'` negotiates a TLS connection. It does not verify the server's certificate. The PostgreSQL docs are explicit: `require` means "I want encryption, I don't care who I'm talking to."
+
+| sslmode | Encrypts | Verifies CA | Verifies hostname |
+|---|---|---|---|
+| `disable` | No | No | No |
+| `prefer` | Maybe | No | No |
+| `require` | Yes | No | No |
+| `verify-ca` | Yes | Yes | No |
+| `verify-full` | Yes | Yes | Yes |
+
+`verify-full` is the only mode that actually confirms you're talking to your database.
+
+## The MITM attack surface
+
+Getting on the network path between your application and RDS sounds hard. Inside AWS it is less hard than expected:
+
+- **VPC misconfiguration**: a misconfigured route table, transit gateway attachment, or peering route that sends traffic through an unexpected intermediate hop
+- **DNS poisoning**: a compromised or spoofed DNS response for the RDS endpoint hostname that directs the TCP connection to an attacker-controlled host
+- **Compromised adjacent workload**: a Lambda function or container with overly broad VPC access that can intercept traffic from a co-located service
+
+An attacker in any of these positions presents a certificate they control. If the client is not verifying the server certificate, the TLS handshake succeeds. Every query, every result row, every credential passed in a connection string or IAM token traverses the attacker's connection.
+
+## The fix
+
+### Add the RDS CA bundle to your container image
+
+```dockerfile
+RUN curl -o /etc/ssl/certs/rds-ca.pem \
+    https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+```
+
+Put this in your base image or application Dockerfile. The global bundle is public, maintained by AWS, and covers all current CA generations. Do this once and inherit it.
+
+### pg8000: build an SSLContext that actually verifies
+
+```python
+import ssl
+import pg8000.native
+
+ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+ssl_ctx.check_hostname = True
+ssl_ctx.load_verify_locations("/etc/ssl/certs/rds-ca.pem")
+
+conn = pg8000.native.Connection(
+    host="mydb.cluster-xyz.us-east-1.rds.amazonaws.com",
+    database="mydb",
+    user="myuser",
+    password="...",
+    ssl_context=ssl_ctx,
+)
+```
+
+`check_hostname=True` requires `verify_mode=ssl.CERT_REQUIRED`. Python enforces this: if you set `check_hostname=True` while `verify_mode` is `CERT_NONE`, you get a `ValueError` at context creation, not silently at connection time. That's useful: a bad SSLContext blows up during startup rather than letting bad connections through.
+
+### SQLAlchemy + psycopg2: use verify-full
+
+```python
+engine = create_engine(
+    "postgresql+psycopg2://user:password@mydb.cluster-xyz.us-east-1.rds.amazonaws.com/mydb",
+    connect_args={
+        "sslmode": "verify-full",
+        "sslrootcert": "/etc/ssl/certs/rds-ca.pem",
+    },
+)
+```
+
+### SQLAlchemy + asyncpg: pass an SSLContext directly
+
+asyncpg does not use psycopg2's `sslmode` flags. It accepts a Python `ssl.SSLContext`:
+
+```python
+import ssl
+from sqlalchemy.ext.asyncio import create_async_engine
+
+ssl_ctx = ssl.create_default_context(cafile="/etc/ssl/certs/rds-ca.pem")
+
+engine = create_async_engine(
+    "postgresql+asyncpg://user:password@host/db",
+    connect_args={"ssl": ssl_ctx},
+)
+```
+
+`ssl.create_default_context()` enables `CERT_REQUIRED` and `check_hostname=True` by default. Loading the CA file is all you need.
+
+### RDS Proxy
+
+RDS Proxy terminates the client TLS connection and establishes its own connection to the RDS instance. Certificate verification rules apply to the client-to-proxy leg. The proxy uses a cert from AWS Certificate Manager whose chain traces back to the same AWS RDS root CA, so the same global bundle works for both direct RDS and RDS Proxy connections. The `sslmode=verify-full` + `sslrootcert` approach requires no change.
+
+### IAM authentication is not a substitute
+
+IAM auth generates short-lived tokens that replace the database password. It secures the credential, not the channel. You can use IAM auth over an unverified TLS connection. The token still transits a connection whose server identity you haven't confirmed. The two controls are independent. Use both.
+
+## What to audit now
+
+A quick pass over your codebase will surface most cases:
+
+```bash
+# Find pg8000 connections
+grep -rn "ssl_context" --include="*.py" .
+
+# Find SQLAlchemy sslmode usage
+grep -rn "sslmode" --include="*.py" .
+```
+
+Look for:
+- `ssl_context=True` or any `SSLContext` missing `CERT_REQUIRED` and `check_hostname=True`
+- `sslmode='require'` without a matching `sslrootcert`
+- Dockerfiles based on `amazonlinux:2` or `amazonlinux:2023` without an explicit RDS CA bundle fetch
+
+In most codebases, this is a one-line change per connection and one line in the Dockerfile. The CA bundle download is the part people skip, and it's the part that makes everything else work.
