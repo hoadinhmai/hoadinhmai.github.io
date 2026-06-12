@@ -8,7 +8,7 @@ import { filterPublished, sortByDateDesc } from '../utils/posts';
 const posts = sortByDateDesc(filterPublished(await getCollection('blog'))).slice(0, 5);
 ---
 
-<BaseLayout title="Hoa Mai — Cloud Engineer">
+<BaseLayout title="Hoa Mai">
   <Hero />
   <section>
     <h2 class="mono" style="font-family:var(--mono);font-size:0.8rem;letter-spacing:0.08em;color:var(--faint);text-transform:uppercase;margin-bottom:1.5rem;">Writing</h2>
