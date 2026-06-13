@@ -1,0 +1,90 @@
+---
+title: "Project Glasswing and Claude Mythos, Part 1: the initiative and what it found"
+description: "Anthropic and 11 major tech companies launched a collaborative AI security initiative on April 7, 2026. Here is what it is, what Claude Mythos Preview can do, and what it means for the code you ship."
+pubDate: 2026-06-14
+tags: ["ai", "security", "anthropic"]
+draft: false
+---
+
+An AI model has autonomously identified zero-day vulnerabilities in every major operating
+system and web browser, including flaws that survived decades of human review and millions
+of automated tests. That is not a research preview or a roadmap claim. It is a system
+that exists, is running now, and has restricted access while Anthropic works out what
+broader deployment looks like.
+
+That system is Claude Mythos Preview, and the initiative behind it is Project Glasswing.
+
+## What is Project Glasswing?
+
+Project Glasswing launched on April 7, 2026, as a collaborative effort between Anthropic
+and eleven founding partners: AWS, Apple, Broadcom, Cisco, CrowdStrike, Google,
+JPMorganChase, the Linux Foundation, Microsoft, NVIDIA, and Palo Alto Networks. More than
+40 additional organisations maintaining critical software infrastructure are also involved.
+
+The stated goal is defensive: use advanced AI capabilities to find and fix vulnerabilities
+in critical software before attackers can exploit them. The initiative is also explicitly
+designed to prevent powerful AI cyber capabilities from proliferating to actors not
+committed to responsible deployment. The founding partners represent the organisations
+that run much of the world's software infrastructure, and the Linux Foundation's
+involvement signals a direct focus on the open-source layer that underpins almost all of it.
+
+## What is Claude Mythos Preview?
+
+Mythos Preview is Anthropic's frontier model for cybersecurity work. Its core
+capabilities are autonomous vulnerability discovery and exploit development: finding
+previously unknown flaws without human steering, and constructing the attack chains needed
+to demonstrate their severity.
+
+The benchmark numbers give a sense of the capability jump. Mythos Preview scores 83.1% on
+cybersecurity benchmarks, compared to 66.6% for the previous-generation Claude Opus 4.6.
+On software engineering tasks it scores between 77.8% and 93.9% depending on the task,
+consistently outperforming earlier models.
+
+What those numbers translate to in practice: Mythos Preview has identified thousands of
+high-severity vulnerabilities, including zero-days across every major operating system and
+web browser. Some of those vulnerabilities had gone undetected for decades despite
+continuous human security review and millions of automated test runs.
+
+Anthropic describes this as AI reaching a level of coding capability where it can surpass
+all but the most skilled human security researchers at finding and exploiting software
+flaws. That framing matters because it sets the context for why access is restricted and
+why the initiative is structured as a controlled rollout rather than a standard product
+launch.
+
+## Who has access and how
+
+Access to Mythos Preview is currently limited to the founding partners and selected
+organisations maintaining critical infrastructure. Broader availability is gated on
+Anthropic developing additional safeguards first, with learnings from the current rollout
+to be shared across the industry within 90 days of launch.
+
+When Mythos Preview becomes more widely available, it will be priced at $25 per million
+input tokens and $125 per million output tokens. It will be accessible through the Claude
+API, AWS Bedrock, Google Cloud Vertex AI, and Microsoft Azure AI Foundry.
+
+Alongside the model rollout, Anthropic is committing $100 million in usage credits to
+support organisations doing defensive security work, and $4 million in direct donations to
+open-source security organisations. Open-source maintainers are specifically named as a
+target beneficiary, which reflects the reality that the open-source layer is both the
+most widely used and historically among the least resourced when it comes to systematic
+security review.
+
+## What this means for the code you ship
+
+Three things worth taking from this announcement as a software engineer or tech lead.
+
+First, the capability threshold has shifted. Code you write and ship will increasingly be
+reviewed by systems that can find vulnerabilities that eluded both expert human reviewers
+and extensive automated testing. That raises the floor on what "thorough security review"
+means, and it raises it in a direction that is automated and scalable.
+
+Second, open-source security is getting direct investment. The $4 million in donations and
+explicit focus on open-source maintainers addresses a gap that has been a persistent
+source of risk across the industry. The dependencies your applications rely on are part of
+what this initiative is aimed at.
+
+Third, the 90-day publication commitment means this is not a closed experiment. What
+Mythos finds, what the effective safeguard patterns look like, and what the false positive
+and false negative rates look like in practice will enter the public conversation within
+the year. That is worth tracking if your team is making decisions about AI-assisted
+security tooling.

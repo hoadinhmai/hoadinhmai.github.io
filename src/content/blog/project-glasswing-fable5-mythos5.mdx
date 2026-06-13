@@ -1,0 +1,86 @@
+---
+title: "Project Glasswing and Claude Mythos, Part 2: Fable 5 and Mythos 5"
+description: "Two months after the Glasswing launch, Anthropic released Claude Fable 5 for general use and upgraded the Glasswing model to Mythos 5. Here is what changed and what it means."
+pubDate: 2026-06-14
+tags: ["ai", "security", "anthropic"]
+draft: false
+---
+
+Part 1 covered the April 7, 2026 launch of Project Glasswing and Claude Mythos Preview:
+a restricted AI model that autonomously identifies zero-day vulnerabilities, deployed
+under a controlled framework involving Anthropic and eleven major technology partners.
+
+On June 9, 2026, Anthropic released two models that continue that story. Claude Fable 5
+is the general-availability version of the same underlying capability, with safeguards
+applied. Claude Mythos 5 is the upgraded successor to Mythos Preview, still restricted to
+Project Glasswing partners.
+
+## What changed from Mythos Preview to Mythos 5
+
+Mythos 5 is a new model generation built on the same foundation as Mythos Preview but
+more capable across all task categories. Software engineering scores now range from 77.8%
+to 93.9% depending on the benchmark. The model handles long-horizon autonomous work
+across multiple domains: extended codebase migrations, complex analytical tasks,
+protein design, and novel research generation.
+
+Access remains restricted to Project Glasswing cybersecurity partners and a set of
+approved biology researchers. The Glasswing framework is the mechanism for controlled
+deployment: the capability exists, and the partner structure determines who can use it and
+for what.
+
+## What Fable 5 is
+
+Fable 5 is the broadly available model built from the same underlying architecture as
+Mythos 5. The difference is a set of capability classifiers that activate before the model
+responds to certain categories of request.
+
+Three classifiers are active in Fable 5:
+
+- Cybersecurity queries route to Claude Opus 4.8 rather than the Fable 5 model
+- Biology and chemistry requests with dual-use potential are handled the same way
+- Attempts to distil the model's weights or replicate its capabilities are blocked
+
+Anthropic reports these classifiers trigger in fewer than 5% of sessions. External red
+team testing across more than 1,000 hours found no universal jailbreaks.
+
+The practical effect: Fable 5 is a capable general-purpose model for software engineering
+and knowledge work, but the specific capabilities that make Mythos 5 useful for Glasswing
+are not present. Cybersecurity work through Fable 5 will use Opus 4.8 as the backend.
+
+## What Fable 5 can do in software engineering
+
+The non-restricted capabilities in Fable 5 are significant on their own. Stripe reported
+that Fable 5 compressed months of engineering work into days, completing a large codebase
+migration in one day that would have taken two months manually. The model handles
+long-horizon tasks without requiring continuous human steering: scoping, execution, and
+verification across extended task chains.
+
+Other reported capabilities include vision strong enough to rebuild web applications from
+screenshots, top-tier performance on complex financial analysis benchmarks, and autonomous
+research generation that produced peer-reviewed findings in molecular biology. The
+software engineering applications are the most immediately relevant for most teams.
+
+## Pricing and availability
+
+Fable 5 is available immediately through the Claude API and through subscription plans,
+with a phased rollout for subscription access. Pricing is $10 per million input tokens and
+$50 per million output tokens.
+
+Mythos 5 is not available through standard API access. It is available to Project
+Glasswing partners and approved biology researchers through the existing Glasswing
+partner framework.
+
+## What this looks like from a software engineering perspective
+
+The two-model structure reflects a deliberate split between capability and access. The
+Glasswing framework gave Anthropic a mechanism to deploy and study full Mythos-class
+capabilities in a controlled environment before deciding what a general-availability
+version should look like. Fable 5 is the output of that process: a capable model for
+general software work, with the highest-risk capabilities routed away rather than removed
+entirely.
+
+For engineers not in the Glasswing partner network, Fable 5 is what is accessible. For
+security teams within those partner organisations, Mythos 5 now replaces Mythos Preview.
+The 90-day commitment from the April launch to share learnings publicly means a clearer
+picture of what Mythos 5 has found, and how, should be available before the end of the
+third quarter.
