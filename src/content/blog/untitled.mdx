@@ -1,0 +1,61 @@
+---
+title: "AWS Summit New York 2026: Agents, Security, and Developer Tooling Announcements"
+description: "A summary of the major AWS announcements from the 2026 Summit in New York, covering new AgentCore capabilities, security tooling, developer agents, and infrastructure updates."
+pubDate: 2026-06-18
+tags: ["aws", "ai", "anthropic", "security", "waf", "cloudformation"]
+draft: false
+---
+
+AWS Summit New York 2026 centered on agentic AI: what agents can access, how to secure them, and how to build them faster. Here is a rundown of the major announcements.
+
+## Amazon Bedrock AgentCore
+
+Amazon Bedrock AgentCore received several additions aimed at closing the gap between prototype and production.
+
+**Managed Knowledge Base** is now available for enterprise RAG pipelines. It includes native data connectors, Smart Parsing for multi-format documents, and an Agentic Retriever for multi-step queries. It integrates directly with AgentCore Gateway.
+
+**Web Search on AgentCore** is a fully managed tool that grounds agent responses in current web content with citations. Data stays within the customer's AWS environment. No external infrastructure to manage.
+
+**AgentCore Harness** is now generally available. You define your agent's model, tools, skills, and instructions in configuration. AgentCore handles the orchestration loop.
+
+**AWS Context** is announced as a forthcoming service. It maps relationships across existing organizational data into a knowledge graph and exposes an agentic search interface so agents can access governed data, business rules, and domain knowledge at runtime.
+
+## AWS WAF: AI Traffic Monetization
+
+AWS WAF Bot Control adds a capability for content owners to charge AI bots for access. You set a price, accept payment through a third-party provider, and WAF grants scoped access at the edge. This targets publishers and API owners whose content is scraped by AI crawlers.
+
+## Security: AWS Continuum
+
+AWS Continuum is a new product that aggregates security findings, prioritizes them by business impact, identifies which are exploitable, and drives remediation through existing processes.
+
+**Continuum for code vulnerabilities** is in gated preview.
+
+**AWS Security Agent**, now part of Continuum, adds:
+
+- Threat modeling using the STRIDE framework (preview), generating threats and mitigations from application context
+- Pull request code scanning with remediation across major Git platforms
+- IDE integrations via Kiro, Claude Code plugin, and MCP
+
+## Developer Tooling
+
+**Kiro for iOS** is in gated preview. It is a native iOS app for interacting with Kiro sessions: starting them, reviewing diffs, and approving changes from a phone.
+
+**AWS DevOps Agent** adds release management. Before a deployment, it runs a release readiness review against natural language standards you define and executes change-specific tests in production-like environments.
+
+**AWS Transform** adds continuous modernization in preview. It scans code repositories against configurable baselines and produces findings in hours. Autonomous remediations generate pull requests for affected repositories.
+
+## Amazon Q: Autonomous Agents and Activity Feed
+
+Amazon Q (now referred to as Amazon Quick in the announcement) introduces autonomous background agents with configurable expertise, tone, and tool access. Examples given: a finance agent processing orders, a sales agent monitoring CRM and email to draft follow-ups and flag risks.
+
+A new activity feed consolidates email, messaging, calendar, and tasks into a single prioritized view. It adapts to observed behavior: which messages you respond to quickly, which threads you skip, and which topics recur in your work.
+
+## Other Launches
+
+**Amazon S3 Annotations** lets you attach up to 1 GB of mutable, queryable context directly to S3 objects. It is designed for AI agents that need to discover and act on data without maintaining a separate metadata system.
+
+**Amazon ECS faster auto scaling** improves response time by supporting 20-second high-resolution metrics. AWS benchmarks show time to trigger scale-out dropped from 363 seconds to 86 seconds, and total time to scale and provision new tasks dropped from 386 seconds to 109 seconds.
+
+**Amazon EC2 G7 instances** use NVIDIA RTX PRO 4500 Blackwell Server Edition GPUs paired with sixth-generation Intel Xeon Scalable processors. AWS claims 4.6x AI inference performance and 2.1x graphics performance compared to G6 instances. AWS is the first major cloud provider to support this GPU.
+
+**Strands Agents** is an open source agent toolkit that now includes better context management in the Harness SDK, Strands Shell for isolated execution, and Strands Evals for chaos testing and red teaming.
