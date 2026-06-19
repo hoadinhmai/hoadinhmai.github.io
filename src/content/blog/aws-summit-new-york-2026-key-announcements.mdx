@@ -1,0 +1,51 @@
+---
+title: "AWS Summit New York 2026: Key Announcements"
+description: "A roundup of the major AWS announcements from the Summit in New York City, covering new agent capabilities, security tooling, developer tools, and infrastructure updates."
+pubDate: 2026-06-18
+tags: ["aws", "ai", "anthropic", "security", "waf", "ec2"]
+draft: false
+---
+
+AWS VP of Agentic AI Swami Sivasubramanian delivered the keynote at AWS Summit New York today. The announcements span agent infrastructure, security automation, developer tooling, and core compute.
+
+## New agent capabilities on Amazon Bedrock AgentCore
+
+Amazon Bedrock AgentCore gains three categories of new capability: connecting agents to knowledge sources, observability for production agents, and access controls that scale with agent capability.
+
+**Managed Knowledge Base** provides native data connectors, Smart Parsing for multi-format data preparation, and an Agentic Retriever for multi-step queries. It integrates with AgentCore Gateway.
+
+**Web Search on AgentCore** is a fully managed tool that grounds agent responses in current web content with citations. It operates entirely within the customer's AWS environment, with no data egress.
+
+**AgentCore Harness** is now generally available. You define your agent's model, tools, skills, and instructions in configuration. Bedrock handles orchestration.
+
+**AWS Context** (coming soon) maps relationships across your existing data into a knowledge graph. Agents query that graph at runtime to access governed data relationships, business rules, and domain knowledge.
+
+## Security at machine speed
+
+**AWS Continuum** (gated preview) takes findings from across your environment, prioritizes them by business impact, validates exploitability, and routes fixes through your existing process. The initial focus is code vulnerabilities.
+
+**AWS Security Agent**, now part of Continuum, adds threat modeling in preview using the STRIDE framework. It also adds pull request scanning with remediation across major Git platforms and IDE integration via Kiro, the Claude Code plugin, and MCP.
+
+## Developer tooling
+
+**Kiro for iOS** (gated preview) is a native app for starting sessions, reviewing diffs, and approving changes from a phone. Sessions run server-side.
+
+**AWS DevOps Agent** adds release readiness review and autonomous release testing. Before a change reaches production, the agent verifies it against natural language standards you define and runs change-specific tests in a production-like environment.
+
+**AWS Transform** adds continuous analysis (preview). It scans your code repositories against configurable baselines and produces findings in hours. You can configure autonomous remediations that open pull requests against affected repositories.
+
+## Amazon Quick autonomous agents
+
+Amazon Quick introduces background agents with configurable expertise, tone, and tool access. Example uses: a finance agent processing orders as they arrive, or a sales agent monitoring CRM activity, email, and Slack to draft follow-ups and flag risks.
+
+Quick also ships a new activity feed that consolidates email, messaging, calendar, and tasks into a single prioritized view. It learns response patterns and topic relevance over time.
+
+## Additional launches
+
+**Amazon S3 annotations** let you attach up to 1 GB of mutable, queryable context directly to S3 objects. The feature targets AI agents and autonomous workflows that need to discover and act on data without maintaining separate metadata systems.
+
+**Amazon ECS faster auto scaling** adds support for high-resolution 20-second metrics. In AWS benchmarking, time to trigger scale-out dropped from 363 seconds to 86 seconds (4.2x faster), and total time to scale and provision new tasks dropped from 386 seconds to 109 seconds (3.5x faster).
+
+**Amazon EC2 G7 instances** use NVIDIA RTX PRO 4500 Blackwell Server Edition GPUs paired with sixth-generation Intel Xeon Scalable processors. AWS describes this as the first major cloud provider deployment of these GPUs. G7 delivers up to 4.6x AI inference performance and up to 2.1x graphics performance compared to G6.
+
+**Strands Agents** updates the open source agent toolkit with improved context management in the Harness SDK, an isolated execution environment called Strands Shell, and chaos testing and red teaming support in Strands Evals.
