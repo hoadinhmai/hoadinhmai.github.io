@@ -1,0 +1,34 @@
+---
+title: "AWS DevOps Agent Release Management: What the Preview Actually Does"
+description: "AWS DevOps Agent now includes release readiness review and autonomous release testing in preview, extending its coverage from post-deployment operations to pre-merge validation."
+pubDate: 2025-07-17
+tags: ["aws", "devops", "ai", "cloudformation"]
+draft: false
+---
+
+AI coding tools have increased pull request volume faster than review and testing capacity can grow. Reviews get approved under time pressure. Test environments drift from production. Changes pile up in queues instead of reaching users.
+
+AWS DevOps Agent now addresses this earlier in the delivery cycle. The release management capability, announced in preview today, adds pre-merge validation to the agent's existing post-deployment operations coverage.
+
+## Two Distinct Features
+
+The preview introduces two separate capabilities that operate at different points in the delivery process.
+
+**Release readiness review** evaluates a code change before it enters the pipeline. The agent checks cross-repository dependency risks, access control changes against AWS Well-Architected Framework best practices, and any standards you have defined in plain English through the Instructions configuration. When no standards are provided, the agent applies general best practices. As part of this review, the agent also runs the software in an AWS-managed isolated environment and executes lightweight user journey tests to confirm the change builds, runs, and passes basic functional checks.
+
+**Autonomous release testing** runs after a review is triggered but before the change merges. Rather than executing a static test suite, the agent reasons about what the change does and constructs a test plan tailored to it. Tests cover functional correctness, behavioral regressions, and integration scenarios. Each test run produces structured artifacts: metrics, logs, traces, and an execution summary.
+
+These two features are complementary but distinct. Release readiness review catches dependency risks, standards violations, and access control issues. Autonomous release testing verifies runtime behavior in a customer-provisioned, production-like environment.
+
+## Where Results Surface
+
+Findings from release readiness review appear in three places: the AWS DevOps Agent console under the Changes view, as comments on pull requests in GitHub or GitLab, and directly in the IDE through the Kiro power or Claude Code plugin. The IDE integration means a developer can identify and address issues before committing to version control, not after a review cycle has already started.
+
+The Changes view in the console shows each review with its status, category, and source. Selecting an entry opens two tabs. The Timeline tab shows the agent's step-by-step reasoning, including which tools it called, which dependencies it consulted, and the timestamps for each step. The Report tab shows the final recommendation.
+
+Each report opens with a summary header showing the recommended action (BLOCK, Proceed with Caution, or Safe to Release), the number of critical issues found, the commit revision, and the number of files changed. The Analysis section explains the recommendation with specific evidence. The Issues section lists findings by severity. The Recommendations section provides actionable steps to resolve each issue. The Changes section lists every modified file with its change type and category.
+
+## Running a Review
+
+To trigger an on-demand release readiness review from the chat interface, open the web app from the AWS DevOps Agent console, choose your Agent Space, and select Operator access. Start a new chat and enter a request such as:
+
