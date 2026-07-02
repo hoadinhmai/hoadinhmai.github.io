@@ -1,0 +1,111 @@
+---
+title: "Project Glasswing and Claude Mythos, Part 3: Fable 5 restored, and what actually happened"
+description: "Fable 5 access was restored July 1, 2026. Here is what actually caused the suspension, why the capability wasn't unique to Fable 5, and the cross-vendor framework that came out of it."
+pubDate: 2026-07-03
+tags: ["ai", "security", "anthropic"]
+draft: false
+---
+
+Part 2 ended with a promise: a further post once the situation resolved or new details
+became public. Both happened. Access to Fable 5 and Mythos 5 was restored on July 1,
+2026, and the story behind the three-week suspension turned out to be more specific,
+and more revealing, than what was known at the time.
+
+## What actually triggered the suspension
+
+Part 2 described the June 12 shutdown as following a government demonstration of a
+potential jailbreak that could be used to identify minor, previously known
+vulnerabilities. That account was accurate as far as it went, but incomplete. The
+demonstration came from Amazon researchers, who discovered a way to bypass Fable 5's
+safeguards through specialized prompting. They used the technique to identify real
+software vulnerabilities and to demonstrate exploiting one of them. That is what the
+US government was responding to.
+
+The suspension mechanism itself was not a direct response to the vulnerability
+finding. The government applied export controls to both Fable 5 and Mythos 5,
+requiring real-time verification of every user's nationality. Anthropic had no way to
+perform that verification at the scale the models were deployed, so it suspended
+access globally rather than risk violating the controls. The shutdown was an
+export-control compliance problem, triggered by the security finding but mechanically
+separate from it.
+
+## The timeline
+
+Fable 5 and Mythos 5 released June 9. Three days later, on June 12, the export
+controls forced the global suspension covered in Part 2's update. On June 26, the
+government approved Mythos 5 access for certain domestic organizations, a partial
+carve-out that left Fable 5 and broader Mythos 5 access still suspended. On June 30,
+the export controls were lifted entirely and Anthropic announced its restoration
+plans. Access to both models was fully restored the next day, July 1.
+
+## It wasn't a Fable 5 problem
+
+The most consequential detail in Anthropic's account is what happened after the
+bypass technique became known. Anthropic and outside researchers tested whether the
+same prompting approach worked against other frontier models. It did. Claude Opus
+4.8, GPT-5.5, and Kimi K2.7 could all be led through the same vulnerability findings
+and the same exploitation demonstration that triggered the suspension.
+
+The capability that shut down one model family globally for three weeks was not
+specific to that model family. The initial response targeted a single vendor's
+product rather than a capability class that, it turned out, already existed across
+the field. That is worth sitting with if you're forming a mental model of how AI
+vulnerability-discovery risk actually distributes across vendors: the answer, at
+least in this case, is broadly rather than narrowly.
+
+## What changed in the models
+
+Anthropic's fix is a new safety classifier targeting the specific bypass technique
+Amazon's researchers reported. It blocks the technique in over 99% of cases. When it
+triggers, the request is routed to Claude Opus 4.8 instead of Fable 5, and the user is
+notified that this happened, the same pattern Part 2 described for the original
+cybersecurity and dual-use classifiers.
+
+The tradeoff is concrete and immediate for anyone using Fable 5 for real engineering
+work: the tightened classifier produces more false positives during legitimate coding
+tasks. Prompts that resemble the bypass pattern, even when the underlying intent is
+ordinary debugging or vulnerability research, are more likely to get routed away from
+Fable 5 than before.
+
+## Availability and pricing after restoration
+
+As of July 1, Fable 5 is available again through the Claude Platform, Claude.ai,
+Claude Code, and Claude Cowork. For Pro, Max, Team, and select Enterprise plans, Fable
+5 usage counts against up to 50% of weekly usage limits through July 7, after which
+access transitions to standard usage-credit billing. Cloud provider access through
+AWS, Google Cloud, and Microsoft Foundry is being re-enabled, with Anthropic saying
+that will happen as quickly as possible rather than committing to a specific date.
+
+## The industry framework
+
+One durable outcome of the incident is a cross-vendor jailbreak severity framework,
+developed by Anthropic together with Amazon, Microsoft, Google, and other Project
+Glasswing partners. It scores a jailbreak against four criteria: capability gain, how
+much the bypass actually increases what a bad actor can do; breadth, how many models
+or systems the technique applies to; weaponization ease, how much additional work is
+needed to turn the finding into something usable; and discoverability, how likely the
+technique was to be found independently.
+
+This is a concrete artifact of the 90-day learnings-sharing commitment Part 1 covered
+at the initial Glasswing launch. Rather than each vendor evaluating jailbreak reports
+against its own internal bar, as Anthropic did when it initially disputed the
+severity of the Amazon finding, there is now a shared framework multiple major labs
+have agreed to use for that evaluation.
+
+## What this means for the code you ship
+
+Three things worth taking from this resolution.
+
+First, the vulnerability-finding capability behind this incident is not exclusive to
+one vendor's model. If your team is making risk decisions based on which AI system
+can or can't find a given class of vulnerability, this incident is evidence that those
+lines move fast and don't hold vendor by vendor.
+
+Second, the false-positive tradeoff in the new classifier is a day-to-day cost, not
+an abstract one. If Fable 5 is part of your engineering workflow, expect more
+legitimate security-adjacent prompts to get rerouted to Opus 4.8 than before June 12.
+
+Third, the jailbreak severity framework is the first concrete cross-vendor standard
+to come out of the Glasswing initiative's transparency commitments. Whether it holds
+up as a durable industry practice, or gets tested again the next time a lab and a
+government disagree about severity, is worth watching.
