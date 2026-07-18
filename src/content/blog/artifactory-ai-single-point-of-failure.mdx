@@ -1,0 +1,114 @@
+---
+title: "Artifactory's Quiet Rise to Enterprise Single Point of Failure"
+description: "For two decades Artifactory was invisible plumbing that made immutable, versioned deployments possible. AI-accelerated development multiplied the traffic hitting it and turned that plumbing into critical infrastructure with no fallback."
+pubDate: 2026-07-18
+tags: ["devops", "ci-cd", "supply-chain", "ai"]
+draft: false
+---
+
+Every enterprise that has run JFrog Artifactory for more than a decade tells some version of
+the same story: nobody remembers deciding to make it critical infrastructure. It accumulated
+the job one build pipeline at a time, until the day it went down and the entire release
+process stopped with it.
+
+That accumulation was not an accident. It was the direct result of what Artifactory is good
+at, and AI-driven development has since put that role under a kind of load nobody sized for.
+
+## The plumbing nobody voted for
+
+Artifactory started as a Maven repository manager: a place to host `.jar` files so teams
+didn't have to pull them from the public internet on every build. It didn't stay there.
+Docker registries, npm, PyPI, Go modules, Helm charts, generic binaries, RPMs, all of it
+consolidated into the same system, because running five separate repository managers for
+five package ecosystems is strictly worse than running one.
+
+That consolidation is what made it load-bearing. Once every package type an org depends on
+resolves through one system, that system is no longer a convenience. It's the only path
+between a developer's laptop and anything that runs in production.
+
+## Immutable deployments and versioned artifacts
+
+The mechanism that makes this work is simpler than the ecosystem sprawl suggests. A build
+produces an artifact once. That artifact gets a version identifier, a build number, a
+semver tag, a commit SHA, and Artifactory stores it write-once against that identifier.
+Nothing about the artifact changes after that point.
+
+This matters because it decouples "what got tested" from "what gets deployed." A promotion
+pipeline moves the exact same binary from a dev repo to a staging repo to a release repo.
+It never rebuilds from source at each stage. What passed integration tests in staging is
+byte-for-byte identical to what runs in production, because it's the same file with a
+different repo path, not a recompiled equivalent.
+
+Rollback follows the same logic. Reverting a bad deploy means re-pulling an older, still-immutable
+artifact rather than reconstructing a previous state from source and hoping the build is
+reproducible. That guarantee, that version `1.4.2` today is bit-identical to version `1.4.2`
+six months from now, is the entire reason enterprises centralize on a system like this instead
+of building from source at deploy time.
+
+## Then AI changed the traffic pattern
+
+Capacity planning for an artifact repository has always assumed a human-paced release cadence:
+some number of engineers, each running some number of builds a day, each build resolving
+dependencies and pushing artifacts a handful of times.
+
+AI coding agents don't work on that cadence. An agent iterating on a task runs a build, runs
+tests, resolves dependencies again after a dependency bump, and repeats that loop many times
+per hour, often across several tasks running in parallel, sometimes unattended overnight.
+Every one of those iterations is a request to Artifactory: a `pip install`, an `npm install`,
+a Maven dependency resolution, a Docker base image pull.
+
+None of this shows up as a deliberate capacity decision. It shows up as a slow climb in
+request volume, connection counts, and storage churn that tracks adoption of AI-assisted
+development rather than headcount. The infrastructure sized for a team of thirty engineers is
+now serving something closer to thirty engineers plus an unbounded number of tireless,
+parallel, always-building agents.
+
+## Project Glasswing adds a second forcing function
+
+The AI-driven build volume above assumes teams that were already routing dependencies
+through Artifactory. A large population of teams never did that. They resolve `npm install`
+against the public registry, `pip install` against PyPI, and `mvn` against Maven Central
+directly, with no internal proxy in between. Direct-to-internet resolution has survived this
+long because it's simpler to set up and nothing forced the migration.
+
+Project Glasswing is that forcing function. Anthropic's Claude Mythos Preview, the model
+at the center of the initiative, has already surfaced thousands of high-severity
+vulnerabilities across widely used software, including flaws in dependencies that had gone
+unreviewed for years. Once an org accepts that AI-scale vulnerability discovery applies to
+the open-source packages it consumes, not just the code it writes, direct internet resolution
+becomes a compliance gap rather than a convenience. There is no way to scan, gate, or quarantine
+a package that a build agent pulled straight from a public registry and used before anyone
+looked at it.
+
+Closing that gap means putting a proxy in front of every public registry, so every package
+transits a point where it can be scanned before it reaches a build. Artifactory's remote and
+virtual repositories are the existing mechanism most enterprises already own for exactly this.
+Teams that spent years pulling packages directly from the internet are, as Glasswing-class
+scanning becomes an expectation rather than a novelty, the next wave migrating onto the same
+infrastructure that's already absorbing the AI-driven build volume increase. Both pressures
+land on the same system at the same time.
+
+## Single point of failure
+
+The failure mode this produces is straightforward. When Artifactory has an outage, hits a
+license-enforced connection cap, or runs out of storage, every build, every deploy, and every
+rollback across the organization stops at the same moment. There is no fallback path, because
+the entire value proposition was consolidating every package type and every immutable artifact
+into one system with no alternative route.
+
+AI-driven throughput makes the blast radius worse, not just the average load. More pipelines
+are in flight at any given moment, which means an outage catches more concurrent work
+mid-execution, and the backlog that has to drain once the system recovers is larger than it
+would have been under human-only build volume.
+
+## What to audit
+
+Check whether your Artifactory HA and DR topology was sized before or after AI coding tools
+were adopted on your build pipelines. Look at request volume and connection count trends over
+the last year, not the last capacity review. Confirm a pull-through cache or local mirror
+exists for the dependencies your build agents hit most, so a transient Artifactory outage
+degrades builds instead of halting them outright. Verify that metadata and binary storage
+backups are actually restorable, not just scheduled, since immutability only protects you if
+the store holding those immutable artifacts is itself recoverable. And find out which teams
+in your org still resolve packages straight from the public internet, because that population
+is the next one your capacity plan needs to account for.
