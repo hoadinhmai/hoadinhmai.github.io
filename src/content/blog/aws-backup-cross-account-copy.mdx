@@ -1,0 +1,108 @@
+---
+title: "AWS Backup Cross-Account Copy: The Isolation Step Most Teams Skip"
+description: "AWS Backup started as an account-scoped service: one plan, one vault, one blast radius. Here's how cross-account copy and organisation-wide backup policies changed that, and why the isolation step still gets left out."
+pubDate: 2026-07-26
+tags: ["aws", "backup", "security"]
+draft: false
+---
+
+Ransomware encrypts an EC2 fleet. The incident responder opens AWS Backup to restore from the last recovery point. The vault holding those recovery points lives in the same account the attacker has root on.
+
+Whatever technique got them into the production account also gets them to the backups. Deleting a recovery point is an API call the attacker's stolen credentials can already make. This isn't a hypothetical, it's the default state of an AWS Backup setup that never went past step one.
+
+## Backup started as something an account did to itself
+
+AWS Backup's original model is entirely account-scoped: a backup plan defines a schedule, a backup window, and a vault to write into, then a resource assignment by tag tells it what to back up, all inside one account, one region. That's still the shape most backup plans take today, and for a lot of workloads it's genuinely enough. It answers "did I fat-finger a `DROP` statement" or "did an instance get corrupted." It does not answer "what if the account itself is the thing that got compromised."
+
+A recovery point sitting in the same account as the resource it protects shares that account's blast radius. Anyone with `backup:DeleteRecoveryPoint` in that account, whether that's an attacker with stolen credentials, a misfiring automation, or a disgruntled insider, can remove the backup and the original in the same session.
+
+## Cross-account copy is the fix, and it's opt-in
+
+AWS Backup added cross-account copy in November 2020, specifically to give customers "an additional layer of protection should the source account experience disruption from accidental or malicious deletion, disaster, or ransomware." It puts a second copy of the recovery point in a separate AWS account, one an attacker in the source account has no path into.
+
+Getting there takes more setup than a same-account backup plan:
+
+- Both accounts must belong to the same AWS Organizations organisation.
+- The management account has to enable cross-account backup org-wide first, in **Settings** or via `UpdateGlobalSettings`. It's off by default.
+- The destination account needs its own backup vault with a customer managed KMS key. Resources fully managed by AWS Backup can use the `aws/backup` managed key instead, but most resource types require a customer managed key because AWS managed key policies can't be shared across accounts.
+- The destination vault needs a resource-based access policy allowing `backup:CopyIntoBackupVault` from the source account, OU, or organisation.
+- The source account's copy role needs `backup:CopyFromBackupVault` (on the recovery point) and `backup:CopyIntoBackupVault` (on the destination vault ARN) as identity-based permissions. `AWSBackupServiceRolePolicyForBackup` already includes both.
+- The default backup vault can never be a cross-account destination. It's encrypted with a key that can't be shared.
+
+None of this happens by checking a box on a backup plan. It's a deliberate, multi-account configuration exercise, which is exactly why so many AWS Backup deployments never get past the same-account plan they started with.
+
+## The part that gets missed even after cross-account copy is turned on
+
+Flipping the org-wide cross-account backup switch enables the capability for every account in the organisation, not only the intended source and destination pair. Any member account can configure itself as a destination for any other account's backups unless something stops it.
+
+AWS's own recommendation here is to constrain this with service control policies once cross-account backup is enabled, not to leave it open. Three patterns show up in the documentation: denying `backup:CopyIntoBackupVault` unless the destination vault carries an approved tag, denying `backup:CopyFromBackupVault` unless the destination matches an approved account or vault name, and denying it unless the destination falls inside an approved OU path. Whichever pattern fits, the point is the same: the org-wide switch is a capability grant, not a configuration.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Deny",
+      "Action": "backup:CopyIntoBackupVault",
+      "Resource": "*",
+      "Condition": {
+        "Null": { "aws:ResourceTag/DestinationBackupVault": "true" }
+      }
+    }
+  ]
+}
+```
+
+There's a second, quieter gap. If a destination account ever leaves the organisation, it keeps whatever backups were copied to it. That's now a full copy of your data sitting in an account outside your organisational boundary, with no automatic clawback. AWS's stated mitigation is a service control policy denying `organizations:LeaveOrganization` on any account you've designated as a backup destination. Without it, cross-account copy quietly becomes a data exfiltration path the moment someone offboards an account.
+
+## From one plan per account to one policy for the organisation
+
+A single backup plan doesn't scale once an organisation has more than a handful of accounts. Someone has to create the same plan, the same vault, the same tag-based resource assignment, in every account, and keep them all consistent as requirements change.
+
+AWS Organizations backup policies solve that by moving backup configuration out of individual accounts entirely. A backup policy is a declarative Organizations policy type, the same mechanism behind service control policies and tag policies, expressed as JSON and attached to the organisation root, an OU, or an individual account. Organizations merges whatever's attached at each level of the hierarchy into an effective policy per account, and AWS Backup executes that effective policy without anyone touching the member account directly.
+
+```json
+{
+  "plans": {
+    "OrgBackupPlan": {
+      "regions": { "@@assign": ["us-east-1"] },
+      "rules": {
+        "Daily": {
+          "schedule_expression": { "@@assign": "cron(0 5 ? * * *)" },
+          "target_backup_vault_name": { "@@assign": "org-primary-vault" },
+          "copy_actions": {
+            "arn:aws:backup:us-east-1:$account:backup-vault:secondary_vault": {
+              "target_backup_vault_arn": {
+                "@@assign": "arn:aws:backup:us-east-1:$account:backup-vault:secondary_vault"
+              }
+            }
+          }
+        }
+      },
+      "selections": {
+        "tags": {
+          "prod": {
+            "iam_role_arn": { "@@assign": "arn:aws:iam::$account:role/BackupRole" },
+            "tag_key": { "@@assign": "Environment" },
+            "tag_value": { "@@assign": ["prod"] }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+The `$account` placeholder and the `@@assign` inheritance operator do the work of making one policy apply correctly across every account it's attached to, resolving to each account's own ID and vault at execution time. Since November 2022, this administration can also be delegated to a member account instead of requiring the management account itself, which matters for organisations that keep the management account locked down to a small team.
+
+The gotcha here is specific to how inheritance works. A backup policy can be written as a deliberately partial document, relying on a parent OU or the root to supply the missing pieces, with the intent that a complete effective policy assembles once everything merges. If that merge doesn't produce every required element for a given account, AWS Backup doesn't back up the affected resources and doesn't raise anything louder than an entry in that account's own job history. Nobody at the organisation level sees a failure. They see nothing, which reads as success until someone needs a recovery point that was never created.
+
+## What to audit
+
+Check whether backup vaults live in the same account as the resources they protect. If cross-account copy was never configured, "we have backups" and "we have isolation from account compromise" are different claims, and only one of them is true.
+
+Check for an SCP constraining valid cross-account backup destinations. If cross-account backup is enabled org-wide with no destination guardrail, any member account can pull backups from any other.
+
+Check for an SCP denying `organizations:LeaveOrganization` on designated backup destination accounts. Without it, offboarding an account can walk a full backup copy out of the organisation with it.
+
+If backup policies are in use, pull the effective policy for a sample of accounts directly from the AWS Backup console rather than reading the individual policies attached at each OU. A policy that looks complete at the root can still resolve to an invalid effective policy for a specific account, and that failure mode doesn't announce itself.
