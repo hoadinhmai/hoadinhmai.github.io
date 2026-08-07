@@ -1,0 +1,86 @@
+---
+title: "CNAPP vs CSPM in AWS: The Services Behind the Acronyms"
+description: "CNAPP and CSPM aren't just vendor categories. AWS split Security Hub into exactly those two products, and mapping the rest of the category onto native services shows where the stack holds up and where it doesn't."
+pubDate: 2026-08-08
+tags: ["aws", "security", "cnapp", "cspm"]
+draft: false
+---
+
+AWS renamed Security Hub to Security Hub CSPM and shipped a new Security Hub that
+correlates its findings with GuardDuty, Inspector, and Macie into exposure findings and
+attack path graphs. That's not a rebrand for its own sake. AWS effectively rebuilt the
+CNAPP vs CSPM split that vendors like Wiz have been selling as a category difference,
+as two separate native products.
+
+Which raises the practical question for anyone evaluating a CNAPP platform against an
+AWS-only estate: how much of the category is already sitting in the console under a
+different name, and where does the native stack actually stop.
+
+## CSPM is one service, not a category
+
+Security Hub CSPM does what CSPM has always done: continuous checks against AWS
+Foundational Security Best Practices, CIS, PCI DSS, and NIST, running against a resource
+inventory that AWS Config maintains underneath it. It flags misconfigurations. It scores
+compliance. It does not tell you which of those misconfigurations is actually reachable
+by an attacker.
+
+That reachability question is what the industry calls CNAPP, and it's also what the new
+Security Hub does. It ingests Security Hub CSPM's findings alongside GuardDuty and
+Inspector, and produces exposure findings: a misconfigured resource is only worth
+surfacing at high priority if it's also internet-reachable and has an exploitable
+vulnerability. As of mid-2026 Security Hub also does impact analysis on top of that,
+tracing the IAM permissions attached to an exposed resource to show what else an
+attacker could reach from it, rendered as an attack path graph.
+
+## Mapping the rest of the category
+
+Wiz's own [CNAPP vs CSPM breakdown](https://www.wiz.io/academy/cloud-security/cnapp-vs-cspm)
+lists what CNAPP adds over CSPM: workload protection, CIEM, IaC scanning, deeper
+vulnerability management, plus data security posture and secrets detection. Each of
+those has a native AWS answer. None of them are new services; they're existing ones
+doing a job that gets a different acronym depending on who's selling it.
+
+| CNAPP capability | AWS native service | Where it falls short |
+|---|---|---|
+| Workload protection (CWPP) | GuardDuty Runtime Monitoring: EKS on EC2, Fargate ECS, EC2 | Agent-based, deployed per resource type; no EKS on Fargate |
+| Vulnerability management | Amazon Inspector: EC2, ECR, Lambda standard and code scanning | Coverage is AWS-resource-scoped, not cross-cloud |
+| IaC scanning | Inspector Code Security: first-party code, dependencies, IaC | Newer capability, narrower format coverage than dedicated scanners like Checkov or tfsec |
+| CIEM | IAM Access Analyzer: unused access and external access findings | Scoped to IAM entities; no standalone entitlement graph outside what Security Hub's impact analysis adds |
+| Data security posture (DSPM) | Macie: sensitive data discovery | S3 only. No RDS, DynamoDB, EFS, or OpenSearch |
+| Secrets detection | Macie managed data identifiers can flag AWS keys inside S3 objects | Not a source-control or CI/CD secrets scanner |
+| Correlation and prioritization | Security Hub: exposure findings, attack path, impact analysis, OCSF | AWS-only signals; doesn't correlate findings from other clouds |
+
+## Where the gaps actually bite
+
+The two rows that matter most in practice are CIEM and DSPM, because they're the ones
+where AWS native tooling covers the easy case and stops. Access Analyzer's unused access
+findings are genuinely useful for trimming stale permissions, but they don't model
+entitlement the way a dedicated CIEM product does: no cross-account blast radius from a
+compromised role, no "this identity can reach this data store through three hops of
+assumed roles" graph independent of what Security Hub happens to correlate.
+
+Macie's S3-only scope is the same story. Sensitive data sitting in an RDS instance, a
+DynamoDB table, or an OpenSearch domain is invisible to it. If your compliance
+requirement is "know where PII lives" and your data isn't all in S3, Macie alone doesn't
+answer that question.
+
+Secrets detection is the clearest gap. Macie can catch an AWS access key that ends up in
+an S3 object, but nothing in the native stack scans a git history or a CI pipeline log
+for a leaked credential before it reaches a resource Macie can see. That's the job of
+`git-secrets`, TruffleHog, or the secrets scanner bundled into whichever CNAPP platform
+you're running, not an AWS service.
+
+## What to audit
+
+If the estate is AWS-only, single organisation, and the account count is small enough
+that Security Hub's delegated-admin aggregation covers it, the native stack (Security
+Hub CSPM, Security Hub, GuardDuty, Inspector, Access Analyzer, Macie) covers most of the
+capability list a CNAPP vendor pitches, and it's already billed per finding rather than
+per workload.
+
+The case for a third-party platform shows up at the edges this table marks: multi-cloud
+estates where you want one graph instead of five AWS services plus an Azure or GCP
+equivalent, CIEM programmes that need entitlement modelling beyond unused-access
+findings, or DSPM coverage that has to extend past S3. Before signing a CNAPP contract,
+check which of those gaps actually apply. Most of the acronym is already running in your
+account.
