@@ -1,0 +1,45 @@
+---
+title: "AWS Security Agent: Threat Modeling, Kiro Power, and MCP Integration"
+description: "AWS Security Agent adds threat modeling from design docs or source code, IDE-native scanning via a Kiro power and Claude Code plugin, and pull request scanning with remediation for GitHub, GitLab, and Bitbucket."
+pubDate: 2026-06-18
+tags: ["aws", "security", "ai"]
+draft: false
+---
+
+AWS Security Agent, part of AWS Continuum, launched at re:Invent 2025 with on-demand penetration testing. Since then, it added full repository code review. Today's update adds threat modeling, pull request scanning with remediation, and IDE integration through a Kiro power, a Claude Code plugin, and an open MCP server.
+
+## Code Review Updates
+
+Pull request scanning is now available alongside the existing full repository scan. Every pull request triggers deep, reasoning-based analysis that checks against your organizational security requirements and common vulnerability classes. Findings include fix commits and remediation guidance surfaced directly in your GitHub, GitLab, or Bitbucket workflow. AWS Security Agent validates findings in simulated environments to confirm exploitability before surfacing them.
+
+Repository connections now support GitLab and Bitbucket in addition to GitHub, including both SaaS and self-hosted versions. Confluence can be connected to provide existing documentation as review context.
+
+Security requirements packs are available for the AWS Well-Architected Framework, NIST CSF, PCI DSS, and AWS best practices. You can also import requirements from internal documents or Confluence directly. Every finding maps to a compliance posture, so audit readiness tracks with the development process rather than lagging behind it.
+
+## Threat Modeling
+
+Threat modeling is now in preview. AWS Security Agent accepts either a design document or a source code repository as input. From that input, it constructs a model of the application including data flows, architecture components, and trust boundaries, then maps threats using the STRIDE framework.
+
+The output covers potential threat actors, attack vectors, locations where weaknesses exist, and a prioritized list of threats with recommended mitigations. To enable it, choose **Enable threat model** and connect a source code repository in the Security Agent console.
+
+## Kiro Power, Claude Code Plugin, and MCP Integration
+
+AWS Security Agent now runs inside your development environment. A Kiro power, a Claude Code plugin, and an open MCP server let you trigger code reviews, generate threat models, and pull remediation guidance without leaving your IDE or CLI.
+
+To get started with the Kiro power, install it and ask "Set up AWS Security Agent". Kiro checks for an existing Agent Space and asks whether to use it or create a new one.
+
+From there, you can:
+
+- Ask "Run a full security scan on this repo" to scan the entire repository for accumulated risk.
+- Ask "Build a threat model for this application" to generate a threat model saved to `.security-agent/threat_model.md`.
+- Ask "help me remediate my findings" to download findings to your local workspace, prioritized by severity, with an option to open a bugfix spec session.
+
+The Kiro power includes an agent hook that evaluates whether a diff scan should be triggered after the Kiro agent completes its turn, so pull request coverage runs automatically as part of the existing workflow.
+
+Any AI-powered IDE can connect through the open MCP integration, not only Kiro and Claude Code.
+
+## Availability
+
+AWS Security Agent now covers three phases of the software development lifecycle: design-time security through design reviews and threat modeling (preview), development-time security through code review (preview), and deployment-time security through penetration testing (GA).
+
+These features are available in AWS commercial Regions where AWS Security Agent is offered. Regional availability is listed on the AWS Capabilities by Region page. A two-month free trial is available on the pricing page.
