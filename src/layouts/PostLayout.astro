@@ -39,4 +39,28 @@ const formatted = pubDate.toLocaleDateString('en-US', {
     padding: 0.1em 0.35em;
     border-radius: 4px;
   }
+  article table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0 0 1.5rem;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  article th, article td {
+    padding: 0.5rem 0.85rem;
+    border: 1px solid var(--rule);
+    text-align: left;
+    vertical-align: top;
+  }
+  article th {
+    background: var(--accent-soft);
+    color: var(--ink);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  article tbody tr:nth-child(even) {
+    background: var(--surface);
+  }
 </style>
