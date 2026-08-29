@@ -1,0 +1,110 @@
+---
+title: "AI API Pricing in 2026: Headline Rates Converged, the Metering Didn't"
+description: "Claude, GPT-5.6, and Gemini frontier pricing landed within a few dollars of each other in August 2026. What actually moves the bill now is caching, batching, and how GitHub Copilot's new credit meter handles agentic requests."
+pubDate: 2026-08-30
+tags: ["ai", "finops"]
+draft: false
+---
+
+A single agentic coding request on GitHub Copilot burned 822 AI Credits, more than half
+of one Pro+ subscriber's entire monthly allocation of 7,000. That happened three months
+after GitHub retired premium requests in favour of usage-based billing, and it is the
+sharpest illustration of what changed across AI pricing this year: headline rates look
+flat or falling, but what lands on the bill depends on metering details most
+teams have not read closely.
+
+## The frontier converged to within a few dollars
+
+As of late August 2026, the three frontier API tiers sit close enough together that model
+choice is no longer a pricing decision on its own.
+
+| Model | Input | Output | Notes |
+|---|---|---|---|
+| Claude Opus 5 | $5.00 | $25.00 | Anthropic's frontier tier since Jul 24 |
+| GPT-5.6 Sol | $4.00 | $20.00 | Promotional, list price is $5/$30 |
+| Gemini 3.1 Pro (up to 200K) | $2.00 | $12.00 | Rises to $4/$18 above 200K input tokens |
+
+OpenAI's Sol cut, announced August 21, undercuts Opus 5 on both input and output, but
+only for the length of a promotion running through at least November 21. Its list price
+of $5/$30 is the most expensive of the three once the promotion lapses.
+
+The one price move that is not promotional: Claude Sonnet 5 launched June 30 at $2/$10,
+with a scheduled September 1 increase to $3/$15 already cancelled. Anthropic's own docs
+now state that increase "will not occur." That is the rare case of a frontier vendor
+locking in a rate rather than testing how much the market will bear.
+
+## Every vendor now meters the same three axes
+
+Base tokens are the number everyone quotes. The two numbers that move a
+production bill are cached input and batch processing, and all three vendors have
+converged on the same discount structure for both.
+
+Cache reads cost roughly a tenth of standard input everywhere: $0.10 on Anthropic's
+Haiku tier, $0.50 on Opus 5, and about 10% of the input rate on OpenAI and Google.
+Batch processing, for workloads that can tolerate asynchronous turnaround, is a flat 50%
+off input and output at all three vendors. Stack both together and effective spend on a
+cacheable, batchable workload can fall more than 90% below the headline rate, on any of
+the three platforms.
+
+That is a bigger lever than choosing between Sonnet 5 and Gemini 3.1 Pro. A team that
+picks the "cheaper" model but never turns on caching is leaving more money on the table
+than the model choice was worth.
+
+## Consumer tiers cluster at $20, symmetric all the way to $200
+
+The chat subscription market has converged even harder than the API market. ChatGPT
+Plus, Claude Pro, and Google AI Pro all price at approximately $20 a month, and the top
+individual tier on all three vendors lands at $200 a month: ChatGPT Pro's 20x plan,
+Claude Max's 20x plan, and Google AI Ultra's top storage tier.
+
+The one outlier is Google AI Plus at $4.99 a month, cut from $7.99 in June. Neither
+OpenAI nor Anthropic has a paid tier under $20, which makes Google AI Plus the only
+sub-$10 option with access to a full-capability model rather than a free-tier default.
+
+Claude subscriptions do not include API access; that is billed separately at the rates
+above, a distinction worth confirming before assuming a Pro or Max seat covers
+programmatic usage.
+
+## GitHub Copilot swapped seats for a credit meter
+
+On June 1, 2026, every GitHub Copilot plan moved to usage-based AI Credits, at 1 credit
+per US cent, replacing the old premium-request model. Code completions and next-edit
+suggestions stayed unlimited and free on every paid plan. Chat, agent mode, code review,
+and the CLI now draw from a credit pool billed at the underlying model's per-token rate.
+
+| Tier | Price | Credits included |
+|---|---|---|
+| Pro | $10/mo | $15 (1,500) |
+| Pro+ | $39/mo | $70 (7,000) |
+| Max | $100/mo | $200 (20,000), new signups paused |
+| Business | $19/seat | $19 pooled per user |
+| Enterprise | $39/seat | $39 pooled per user |
+
+Overage bills at the same per-token rates once the pool runs out, and it is switched on
+by default for organisations unless an admin turns it off. The 822-credit anecdote from
+the opening is the kind of event that setup produces: one large agentic request, no cap
+in place, more than half a month's Pro+ allocation gone in a single call. Teams whose
+usage is mostly inline completions will not notice the change at all, since completions
+never touch the credit pool.
+
+## What this means for anyone owning an AI budget
+
+First, model choice matters less than the caching and batch decision. Route bulk or
+classification work to the cheapest current-generation model (Gemini 3.7 Flash or
+GPT-5.6 Luna sit at the current budget end), escalate hard reasoning and agentic coding
+to a frontier tier, and turn on caching and batch wherever latency allows on all of it.
+
+Second, do not budget on promotional pricing. Sol's $4/$20 and Gemini 3.7/3.6 Flash's
+$0.75/$3.75 are both time-boxed, the OpenAI promotion through at least November 21 and
+the Gemini one through the end of the year, with Google's own pricing page stating Flash
+reverts to $1.50/$7.50 on January 1, 2027. Model the reversion, not the promotion.
+
+Third, if the team is on GitHub Copilot, set org-level or per-user spend caps before
+rollout rather than after. Overage is on by default, and a single agentic session can
+consume a meaningful fraction of a monthly allocation before anyone notices.
+
+Fourth, revisit this comparison when any of three things happen: Google ships Gemini 3.5
+Pro (it has been delayed indefinitely and would reset the frontier calculus), the OpenAI
+Sol promotion expires, or January 1, 2027 arrives and Gemini Flash pricing doubles. Any
+one of those changes the cheapest-path answer for workloads currently routed on today's
+numbers.
