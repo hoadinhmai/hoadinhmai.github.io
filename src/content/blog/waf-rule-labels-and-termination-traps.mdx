@@ -1,0 +1,208 @@
+---
+title: "AWS WAF Rule Chains: Managed Rules, Labels, and Termination Traps"
+description: "Why a downstream AWS WAF rule with a correct label match statement never fires, and how managed rule groups, OverrideAction, and rule evaluation order decide where a request actually stops."
+pubDate: 2026-09-06
+tags: ["aws", "waf", "security"]
+draft: false
+---
+
+A team adds a custom rule to their web ACL: if a request was flagged by the Bot Control
+managed rule group but carries a valid session cookie, count it instead of blocking it.
+The rule is written correctly. The label match key matches the exact label Bot Control
+documents. It never fires.
+
+The request was already blocked three rules earlier. The label got added to the request,
+then the evaluation ended right there, before anything downstream ever got a chance to
+read it.
+
+This is not a bug. It is how AWS WAF's rule chain works, and it catches teams who have
+only ever used managed rule groups on their defaults. If you already centralise WAF rules
+with shared rule groups (see [WAF shared rule groups without Firewall Manager](/blog/waf-shared-rule-groups)),
+this is the next layer down: what actually happens inside the web ACL once a request
+hits it.
+
+## Managed rules vs custom rules
+
+| | AWS managed rules | Custom rules |
+|---|---|---|
+| Who writes the logic | AWS or a marketplace vendor | You |
+| Individual rule content | Fixed, not editable | Fully editable |
+| Update cadence | Pushed by AWS automatically | Only when you change them |
+| Per-rule action override | Via `RuleActionOverrides` | Native, set `Action` directly |
+| Whole-group action override | Via `OverrideAction` | Not applicable, no group |
+| Pricing | Per rule group, plus per-request | Included in base WAF pricing |
+| Internal evaluation order | Set by AWS, not visible to you | Set by your own `Priority` values |
+
+The practical difference that causes most of the traps below: a managed rule group is a
+single entry in your web ACL's `Rules` list, at one `Priority`, but it contains many
+sub-rules that AWS evaluates internally in an order you don't control. Your web ACL sees
+the group as one unit. What happens inside it is opaque until a request actually matches
+something and you go looking at the logs.
+
+## Where a request actually stops
+
+AWS WAF evaluates the top-level rules in a web ACL in ascending `Priority` order. It stops
+at the first rule whose action terminates the evaluation. `Block` and `Allow` are
+terminating. `Count` is not, so evaluation continues to the next rule. `CAPTCHA` and
+`Challenge` terminate only when the request lacks a valid token, otherwise they pass
+through non-terminating.
+
+```
+Priority 0: AWSManagedRulesCommonRuleSet   (OverrideAction: None)
+Priority 1: AWSManagedRulesBotControlRuleSet (OverrideAction: None)
+Priority 2: Custom rule, label match on bot label, Action: Allow
+Priority 3: Custom rule, rate limit, Action: Block
+
+Request arrives
+  -> Priority 0: no match, continue
+  -> Priority 1: sub-rule matches, adds label, Action: Block  <-- STOPS HERE
+  -> Priority 2: never evaluated
+  -> Priority 3: never evaluated
+```
+
+If nothing terminates, the web ACL's `DefaultAction` applies. That default only ever
+fires for requests that made it past every rule without a match, which is easy to forget
+when you are debugging why a request was blocked: the answer is never the default action
+if any rule above it had a terminating match.
+
+## OverrideAction, RuleActionOverrides, and the difference that bites
+
+A rule statement that references a rule group, whether managed or your own, uses
+`OverrideAction`, not `Action`. A plain custom rule uses `Action`, not `OverrideAction`.
+Mixing the two on the wrong statement type is a deploy-time validation error, and it is
+the single most common typo when copying a custom rule as a starting point for a managed
+rule group reference.
+
+`OverrideAction: None` leaves each sub-rule's own configured action in effect. If a
+sub-rule inside the group is set to `Block`, it blocks and terminates the whole web ACL
+evaluation, not just the group. `OverrideAction: Count` forces every sub-rule in the group
+to act as `Count` regardless of what is configured inside it, so nothing in that group can
+ever terminate evaluation.
+
+That all-or-nothing behaviour is usually too blunt. If one specific sub-rule inside a
+managed rule group is noisy (a body-size rule false-positiving on legitimate large
+uploads, for example), `RuleActionOverrides` lets you flip just that one rule to `Count`
+while leaving the rest of the group's actions as configured:
+
+```yaml
+Rules:
+  - Name: bot-control
+    Priority: 1
+    OverrideAction:
+      None: {}
+    Statement:
+      ManagedRuleGroupStatement:
+        VendorName: AWS
+        Name: AWSManagedRulesBotControlRuleSet
+        RuleActionOverrides:
+          - Name: SizeRestrictions_BODY
+            ActionToUse:
+              Count: {}
+    VisibilityConfig:
+      SampledRequestsEnabled: true
+      CloudWatchMetricsEnabled: true
+      MetricName: bot-control
+```
+
+`RuleActionOverrides` replaces the older `ExcludedRules` field. `ExcludedRules` only ever
+supported turning a sub-rule's action to `Count`. `RuleActionOverrides` accepts any action,
+which is what makes it useful for the label pattern in the next section: overriding a
+sub-rule to `Count` keeps its label generation intact while stopping it from terminating
+the request.
+
+## Labels: how rules talk to rules further down the chain
+
+A rule, whether custom or inside a rule group, can add labels to a request when its
+statement matches. A later rule in the same web ACL evaluation can inspect those labels
+with a label match statement and act on them. This is how you build conditional logic
+across rule boundaries without duplicating detection logic.
+
+Two constraints matter more than the mechanics:
+
+A label match statement can only see labels from rules evaluated earlier in the same web
+ACL evaluation. Order is everything. There is no way for a rule at `Priority 0` to react
+to a label a rule at `Priority 5` would have added.
+
+Labels carry a prefix that identifies where they were generated. A label added by a rule
+defined directly in the web ACL carries the web ACL's own context. A label added by a
+rule inside a rule group, yours or AWS-managed, carries that rule group's context instead.
+Matching a label from a different context than your own rule requires the fully qualified
+name, prefix included, for example `awswaf:managed:aws:bot-control:signal:automated_browser`.
+`DescribeManagedRuleGroup` returns the exact labels a given managed rule group can produce,
+under `AvailableLabels`, so you don't have to guess the string.
+
+Labels never persist outside a single web ACL evaluation. They are not stored per-IP or
+per-session. Every request starts with none.
+
+## The trap: a label nobody downstream ever sees
+
+This is the mechanism behind the cold open. A label match statement only sees labels from
+rules evaluated earlier, but "evaluated earlier" only happens if evaluation actually
+reaches that point. If the rule or sub-rule generating the label also has a terminating
+action and it matches, the web ACL evaluation ends at that rule. The label was added to
+the request. It just never gets read, because nothing after it runs.
+
+The fix is the same override mechanism from the previous section, aimed at whichever
+sub-rule is generating the label you want to react to later:
+
+```yaml
+Rules:
+  - Name: bot-control
+    Priority: 1
+    OverrideAction:
+      None: {}
+    Statement:
+      ManagedRuleGroupStatement:
+        VendorName: AWS
+        Name: AWSManagedRulesBotControlRuleSet
+        RuleActionOverrides:
+          - Name: TGT_SignalAutomatedBrowser
+            ActionToUse:
+              Count: {}
+
+  - Name: allow-trusted-automation
+    Priority: 2
+    Action:
+      Allow: {}
+    Statement:
+      AndStatement:
+        Statements:
+          - LabelMatchStatement:
+              Scope: LABEL
+              Key: "awswaf:managed:aws:bot-control:signal:automated_browser"
+          - ByteMatchStatement:
+              FieldToMatch:
+                SingleHeader:
+                  Name: x-internal-session
+              PositionalConstraint: EXACTLY
+              SearchString: valid
+              TextTransformations:
+                - Priority: 0
+                  Type: NONE
+```
+
+`TGT_SignalAutomatedBrowser` is overridden to `Count` so it stops terminating the request,
+but it still adds its label. The custom rule at `Priority 2` runs next, sees the label,
+and applies its own logic. Without the override, that custom rule is dead code: correctly
+written, never reached.
+
+## What to watch out for
+
+| Issue | Detail |
+|---|---|
+| Silent no-op rules | A label match rule with no matching traffic in metrics might mean the label is never generated, upstream terminates first, or the label string is missing its context prefix. Check `AvailableLabels` and CloudWatch label metrics before assuming your match logic is wrong. |
+| `OverrideAction` vs `Action` | Only rule group references (`RuleGroupReferenceStatement`, `ManagedRuleGroupStatement`) use `OverrideAction`. Plain rules use `Action`. You must set exactly one, never both. |
+| `OverrideAction: Count` is all-or-nothing | It silences every sub-rule's terminating behaviour in the group, not just the one you care about. Use `RuleActionOverrides` for surgical changes to a single sub-rule. |
+| Priority is the only order that matters | Reordering entries in a template's `Rules` list does nothing on its own. Only the `Priority` field controls evaluation order, and it must be unique across the whole web ACL. |
+| Labels are scoped to one evaluation | They don't persist across requests, and a rule can't see a label from a rule evaluated after it, only before. |
+| Managed rule group internals aren't yours to reorder | You can override individual sub-rule actions, but you can't change the order AWS evaluates sub-rules within the group. |
+
+## Auditing an existing web ACL
+
+Before adding a label-based rule to an existing chain, pull the `Priority` values and
+`Action`/`OverrideAction` settings for every rule ahead of it and check for a terminating
+match that would fire first. `GetWebACL` returns the full rule list in one call, which is
+faster than reading it back out of the console one rule at a time. If the label you want
+to key off comes from a managed rule group, call `DescribeManagedRuleGroup` for that
+group's `AvailableLabels` and confirm the exact string, prefix included, rather than
+copying it from a blog post or a colleague's screenshot.
