@@ -1,0 +1,128 @@
+---
+title: "From ITSM Queue to Product Backlog: A Roadmap for a Cloud Platform Team"
+description: "A team of eight running 20 AWS accounts, critical Redshift clusters and an international expansion cannot be run purely off a ticket queue. Here's how to structure a roadmap that protects strategic work without abandoning ITSM."
+pubDate: 2026-09-08
+tags: ["aws", "platform-engineering", "leadership", "agile"]
+draft: false
+---
+
+Eight engineers, 20 AWS accounts, Redshift clusters feeding analytics into multiple
+parts of the business, critical applications in production, and a product expanding
+into new countries. The team's actual calendar for the week is set by whichever ticket
+is next in the queue.
+
+That's a common state for a cloud platform team that grew out of an operations
+function. It's also a state that quietly stops working the moment the estate gets
+complex enough that some problems take longer to fix than a ticket's SLA allows.
+
+## Why a pure ITSM queue breaks down at this scale
+
+An ITSM queue is built to answer one question well: is this individual request
+resolved, yes or no. It has no native concept of a body of work that spans weeks,
+touches multiple accounts, or trades short-term ticket velocity for a structural fix.
+Everything gets flattened into the same queue, the same SLA clock, the same "close the
+ticket" definition of done.
+
+That works fine when most of the demand really is discrete: reset this, provision that,
+investigate this one alert. It stops working once a meaningful share of the real risk
+in the estate is structural rather than discrete.
+
+A single Redshift cluster feeding multiple business units is not a ticket-shaped
+problem. Its scaling ceiling, its maintenance windows, its blast radius if a query
+pattern degrades performance for every downstream team at once: none of that shows up
+as a queue item until it's already an incident. Twenty accounts without consistent
+guardrails is not a ticket-shaped problem either. Each inconsistency is invisible on its
+own and only becomes expensive in aggregate.
+
+International expansion makes this worse. Data residency requirements, regional
+failover, latency-sensitive routing and new compliance obligations don't arrive as a
+single ticket. They arrive as a standing requirement that every future ticket now has to
+be checked against, and a queue has no mechanism for holding that context.
+
+## Recognising the symptoms
+
+The tell isn't that tickets are getting resolved slowly. It's that the same categories
+of incident keep recurring, security and reliability work that nobody explicitly owns
+keeps sliding, and nobody on the team, including its lead, can describe what the
+platform will look like in two quarters. The queue has no forward view because it was
+never designed to hold one.
+
+Eight people cannot service an unbounded, purely reactive queue and also build the
+things that would shrink that queue. Without a deliberate mechanism to protect time for
+the second kind of work, the first kind will always win, because it has a due date and
+the second kind doesn't.
+
+## Running two tracks, not replacing one with the other
+
+The fix isn't to abolish ITSM. Break/fix work, access requests and genuine operational
+incidents still need a queue, an SLA and a service desk process, because that's the
+right tool for discrete, time-bound requests. The fix is to stop treating the ITSM
+queue as the only source of what the team works on.
+
+```
+Ticket queue (ITSM)              Product backlog (agile)
+--------------------------       --------------------------
+Break/fix                        Account guardrails and landing zone
+Access requests                  Redshift scaling and cost management
+Standard changes                 Security and compliance uplift
+Operational incidents            International expansion foundations
+                                  Automation that reduces future ticket volume
+```
+
+The two tracks need separate capacity, not separate teams. A common starting split is
+roughly 60 to 70 percent of capacity reserved for ticket-driven BAU work and the
+remainder ring-fenced for backlog items, reviewed and adjusted as the ticket volume
+responds to what the backlog delivers. The number matters less than the fact that it's
+explicit, tracked and defended in front of stakeholders, rather than whatever is left
+over after the queue is drained.
+
+## What goes on the roadmap
+
+For a team in this position, the roadmap tends to cluster around four themes. The exact
+scope depends on the estate, but the shape is a reasonable starting point.
+
+| Theme | What it covers | Why it can't live in a ticket |
+|---|---|---|
+| Account and landing zone governance | Consistent guardrails, tagging, SCPs and baseline security across all 20 accounts | No single ticket owns "make every account consistent" |
+| Redshift reliability and cost | Workload management, cluster sizing, concurrency scaling, cost allocation across consuming teams | Requires sustained analysis and cross-team negotiation, not a one-off fix |
+| Security and compliance uplift for critical applications | Closing gaps that a point-in-time audit finds, before they become an incident | Preventative work has no natural trigger in a reactive queue |
+| International expansion foundations | Data residency, regional resilience, latency-sensitive architecture for new markets | A standing constraint on every future decision, not a discrete task |
+
+Automation deserves its own line even though it cuts across all four: every backlog
+item that reduces the manual work behind a recurring ticket type is also a direct
+investment in future capacity. Self-service account provisioning, `guardrails-as-code`
+applied at the organisation level, and standard patterns for onboarding a new
+application into the estate all pay back by shrinking the queue that competes with the
+backlog for time.
+
+## Running agile at eight people without the ceremony overhead
+
+Eight people don't need a scaled framework. They need a backlog that's visible,
+prioritised and reviewed on a cadence, and a lightweight rhythm around it: a short
+planning session to pull the next slice of backlog work into a sprint or iteration,
+a stand-up that covers both tracks so ticket load and backlog progress are visible in
+the same conversation, and a retro that asks whether the ticket queue shrank because of
+what the backlog delivered.
+
+Prioritisation doesn't need to be elaborate either. Weighing expected impact against
+implementation effort, and being explicit about the risk of not doing something, is
+usually enough for a team this size. What matters is that the ranking is visible to
+stakeholders and revisited on a cadence, not settled once and forgotten.
+
+The point of the ceremony isn't process for its own sake. It's making the backlog work
+as visible and defensible as the ticket queue already is, so it stops being the thing
+that gets silently deprioritised whenever the queue gets loud.
+
+## What to audit before you start
+
+Pull four weeks of closed tickets and tag each one as genuinely discrete versus a
+symptom of something structural. If a meaningful share of tickets are recurring
+instances of the same underlying gap, that's the first backlog item, not a coincidence.
+
+Check whether anyone can currently answer what the platform team is building toward
+this quarter without opening the ticket queue. If the answer lives only in someone's
+head, it isn't a roadmap yet, it's an intention.
+
+And check the capacity split honestly. If 100 percent of the team's time is
+accounted for by the queue, there is no protected time for the backlog, and no
+roadmap will survive contact with the next incident until that changes.
