@@ -14,7 +14,12 @@ const formatted = pubDate.toLocaleDateString('en-US', {
 });
 ---
 
-<BaseLayout title={`${title} — Hoa Mai`} description={description}>
+<BaseLayout
+  title={`${title} — Hoa Mai`}
+  description={description}
+  image={`/og${Astro.url.pathname.replace(/\/$/, '')}.png`}
+  publishedTime={pubDate}
+>
   <article>
     <h1 style="font-size:2rem;">{title}</h1>
     <p style="margin-top:0.5rem;margin-bottom:1.5rem;">
