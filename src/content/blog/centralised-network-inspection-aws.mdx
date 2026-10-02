@@ -1,0 +1,209 @@
+---
+title: "AWS Centralised Network Inspection Without Creating a Shared Blast Radius"
+description: "How we introduced inspected egress across roughly 50 AWS accounts while isolating business units, production traffic, firewall recovery paths, and regulated external integrations."
+pubDate: 2026-10-03
+tags: ["aws", "networking", "security", "platform-engineering"]
+draft: false
+---
+
+Every AWS account sent outbound traffic directly to the internet through its own NAT
+gateways. There was no network firewall in the path and no central traffic inspection. If
+a workload could reach a destination, the network layer provided no consistent point at
+which to inspect or control that connection.
+
+Introducing AWS Transit Gateway and Palo Alto Cloud NGFW closed that gap, but putting 50
+accounts behind one inspection plane would have created a different risk. A routing
+mistake, non-production performance test, or firewall recovery event could have affected
+every business unit at once.
+
+We centralised the pattern without centralising the entire failure surface. Each business
+unit received its own inspection and central egress VPC pair. Production and
+non-production used separate Transit Gateways. AWS Network Firewall provided an alternate
+inspection path that we exercised during the production go-live.
+
+The difficult part was not deploying a firewall. It was choosing the right boundaries,
+preserving external network identities, and proving that regulated integrations still
+worked when the inspection path changed.
+
+## The original egress model
+
+The original path was simple because it was distributed:
+
+```text
+[workload VPC in each account]
+              |
+              v
+    [account NAT gateway]
+              |
+              v
+          [internet]
+```
+
+It was also largely ungoverned at the network layer. There was no shared inspection
+policy and no central place to observe outbound traffic consistently.
+
+Distributed NAT gateways gave each account an independent exit, but repeating that model
+across roughly 50 accounts made consistent traffic inspection difficult. The estate also
+included a UK Region introduced for international expansion, so the solution had to scale
+beyond one group of workloads in one regional boundary.
+
+## Centralise the pattern, not the failure surface
+
+Within each business unit, we adapted AWS's
+[centralised inspection topology](https://aws.amazon.com/blogs/networking-and-content-delivery/deployment-models-for-aws-network-firewall/).
+The AWS reference uses AWS Network Firewall. Our primary path used Palo Alto Cloud NGFW,
+with AWS Network Firewall retained as the recovery path.
+
+```text
+[workload VPCs]
+       |
+       v
+[prod or non-prod Transit Gateway]
+       |
+       v
+[inspection VPC]
+       |
+       +-- primary: Palo Alto Cloud NGFW
+       |
+       +-- recovery: AWS Network Firewall
+       |
+       v
+[central egress VPC]
+       |
+       v
+[NAT gateways] -> [Internet Gateway] -> [internet]
+```
+
+Workload VPCs sent their default route to the appropriate Transit Gateway. Traffic crossed
+the business unit's inspection VPC before reaching its central egress VPC, NAT gateways,
+and internet exit.
+
+CloudFormation defined the routes. GitHub Actions deployed the change that selected AWS
+Network Firewall instead of Cloud NGFW during disaster recovery, then restored Cloud NGFW
+after validation. The two firewalls were alternate targets, not two controls chained into
+the normal path.
+
+The exact route-table implementation was less important than its invariant: forward and
+return traffic had to traverse the same stateful inspection path. A route that looks
+correct in isolation can still create asymmetric flows or an alternate path that accepts
+packets without providing a usable application service.
+
+Each business unit had its own inspection and central egress VPC pair. This kept one
+business unit's routing and inspection changes out of another unit's data path while
+retaining a repeatable architecture across the estate.
+
+## Why production and non-production used separate Transit Gateways
+
+The design went through an AWS principal networking specialist for endorsement, then to
+the Head of Platform Engineering for further input and approval.
+
+One material review point was Transit Gateway scope. The AWS specialist recommended one
+Transit Gateway for production and non-production, using separate route tables for logical
+segmentation. That would have reduced duplicated infrastructure.
+
+We chose two Transit Gateways. Non-production included performance testing, where traffic
+volume and connection behaviour could be intentionally abnormal. We did not want that
+traffic, or a non-production routing change, sharing the production transit plane.
+
+The two gateways created a clearer traffic and configuration boundary. They did not make
+the environments immune to regional AWS failures, but they reduced the set of changes and
+test activity capable of affecting production.
+
+That same reasoning drove the business-unit VPC pairs. The architecture was centralised
+enough to enforce a consistent pattern, but partitioned enough to avoid one
+organisation-wide inspection and egress data plane.
+
+## mTLS made source IPs part of the migration
+
+Several government integrations required mutual TLS. The sessions terminated at the
+external integration destinations, not at the inspection layer. Workloads presented their
+client certificates end-to-end, while a forward proxy provided the outbound source IPs
+that external parties had allowlisted.
+
+The two controls established different parts of the trust relationship. mTLS authenticated
+the client to the destination. The allowlist restricted which network sources the
+destination would accept. Changing the AWS egress design could not silently change either
+identity.
+
+The public IP addresses were already allocated to the forward-proxy layer and allowlisted
+by many external parties. Issuing new addresses would have turned the migration into a
+coordinated change across every government and integration partner.
+
+We preserved the existing addresses instead. Before the go-live weekend, the forward-proxy
+layer scaled down and released them so they could be transferred to the NAT gateways in the
+new central egress VPC. External destinations continued to see their approved source
+addresses even though the AWS network path behind them had changed.
+
+Moving the addresses early was a deliberate risk-reduction step. The old path still had to
+release them before the new NAT gateways could use them, but that dependency no longer sat
+inside the critical platform cutover. The weekend change could focus on routing,
+inspection, and application verification rather than combining those tasks with a public
+IP migration.
+
+## Ownership followed the control being changed
+
+A new workload VPC joined its business unit's Transit Gateway and received the standard
+inspected egress path. The network team did not have to design a new firewall insertion
+pattern for every workload.
+
+New firewall rules followed a Jira process for the security team to assess and implement.
+The network team remained accountable for Transit Gateway connectivity, routing, and
+availability, while security owned the policy decision. Cloud security also managed the
+relationship with Palo Alto Networks for Cloud NGFW.
+
+The project manager coordinated the road to production and its regulatory dependencies.
+Many blockers sat outside the deployment pipeline: external allowlists, certificate
+exchange, approvals, and test availability. A correct route and an active firewall rule
+did not mean an external integration was ready.
+
+This operating model did not make firewall changes self-service. It made inspected egress
+the default network pattern and sent policy decisions to the team accountable for them.
+
+## Production readiness required both TVT and BVT
+
+The rollout was phased. Workloads in other AWS accounts migrated first, exercising the
+shared routing, inspection, and egress pattern before the most critical platform moved.
+
+That final platform was scheduled for a Saturday because it required full business
+application testing. Network, security, platform, and application teams coordinated from
+morning until late afternoon.
+
+Platform and security performed technical verification testing (TVT) by monitoring
+network and security logs. Application teams performed business verification testing
+(BVT) by exercising their applications and confirming that their integrations remained
+functional.
+
+Both were necessary. Firewall logs could show that the expected control processed a
+connection, but not that the application completed its business operation. A passing
+application test could show that the service worked, but not that traffic followed the
+intended inspection path.
+
+The DR exercise tested the complete round trip. CloudFormation changes deployed through
+GitHub Actions moved traffic from Cloud NGFW to AWS Network Firewall. The teams repeated
+TVT and BVT on the alternate path. They then restored Cloud NGFW and ran both verification
+layers again.
+
+The cutover succeeded on the first attempt. Earlier account migrations had already tested
+the common architecture, but the critical platform still needed its own BVT because its
+government integrations and mTLS flows were unique.
+
+## What to audit before centralising inspection
+
+Check the blast-radius boundaries first. Decide whether one inspection plane, egress VPC,
+and Transit Gateway should serve the whole organisation or whether business units,
+environments, and performance-test workloads justify separate data paths.
+
+Trace forward and return routes for the primary and recovery firewalls. Do not treat a
+deployed alternate firewall as a tested recovery path. Send representative traffic through
+it, then restore the primary path and repeat the validation.
+
+For regulated integrations, record the complete external contract: client certificates,
+destinations, ports, source IPs, allowlist owners, and testing dependencies. If public IPs
+must move between old and new egress components, treat their transfer as a production
+migration step rather than a routing detail. Complete it before the main go-live when the
+architecture permits, so it does not remain on the critical cutover path.
+
+Finally, pair infrastructure verification with application verification. Centralised
+inspection is not complete when the firewall reports healthy. It is complete when the
+expected control processed the traffic and the application still performed the business
+operation on both the primary and recovery paths.
