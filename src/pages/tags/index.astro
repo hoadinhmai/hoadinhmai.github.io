@@ -7,7 +7,7 @@ import { getAllTags } from '../../utils/posts';
 const tags = getAllTags(await getCollection('blog'));
 ---
 
-<BaseLayout title="Tags — Hoa Mai">
+<BaseLayout title="Tags | Hoa Mai">
   <h1 style="font-size:2rem;margin-bottom:2rem;">Tags</h1>
   {tags.length === 0 ? (
     <p style="color:var(--muted);">No tags yet.</p>
