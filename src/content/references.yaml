@@ -1,0 +1,77 @@
+- id: aws-well-architected
+  title: AWS Well-Architected Framework
+  url: https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html
+  source: aws
+  category: Frameworks
+  tags: [aws, architecture]
+  note: The six pillars. Start here before any design review.
+- id: aws-caf
+  title: AWS Cloud Adoption Framework
+  url: https://docs.aws.amazon.com/whitepapers/latest/overview-aws-cloud-adoption-framework/welcome.html
+  source: aws
+  category: Frameworks
+  tags: [aws, cloud-adoption]
+  note: Six perspectives from business to operations. Frames the org changes, not just the tech.
+- id: aws-sra
+  title: AWS Security Reference Architecture
+  url: https://github.com/aws-samples/aws-security-reference-architecture-examples
+  source: github
+  category: Security
+  tags: [aws, security, multi-account]
+  note: Deployable examples of the SRA account layout and delegated admin setup.
+- id: aws-network-firewall-deployment-models
+  title: Deployment models for AWS Network Firewall
+  url: https://aws.amazon.com/blogs/networking-and-content-delivery/deployment-models-for-aws-network-firewall/
+  source: aws
+  category: Multi-account and Networking
+  tags: [aws, networking, security]
+  note: Distributed, centralized and combined inspection models, with the routing for each.
+- id: cncf-landscape
+  title: CNCF Cloud Native Landscape
+  url: https://landscape.cncf.io/
+  source: cncf
+  category: Platform Engineering
+  tags: [kubernetes, platform-engineering]
+  note: Useful for vendor scanning. Not a recommendation list.
+- id: team-topologies
+  title: Team Topologies key concepts
+  url: https://teamtopologies.com/key-concepts
+  source: other
+  category: Platform Engineering
+  tags: [platform-engineering, teams]
+  note: Platform team as a product, not a ticket queue.
+- id: claude-code-best-practices
+  title: Claude Code best practices
+  url: https://code.claude.com/docs/en/best-practices
+  source: anthropic
+  category: AI Tooling
+  tags: [ai, anthropic]
+  note: Workflows, CLAUDE.md conventions and patterns for agentic coding.
+- id: anthropic-skills
+  title: anthropics/skills
+  url: https://github.com/anthropics/skills
+  source: github
+  category: AI Tooling
+  tags: [ai, anthropic]
+  note: Example Agent Skills to copy and adapt for your own workflows.
+- id: landing-zone-accelerator
+  title: Landing Zone Accelerator on AWS
+  url: https://github.com/awslabs/landing-zone-accelerator-on-aws
+  source: github
+  category: Multi-account and Networking
+  tags: [aws, security, multi-account]
+  note: Config-driven multi-account baseline on top of Control Tower, aligned to compliance frameworks.
+- id: cncf-platforms-whitepaper
+  title: CNCF Platforms whitepaper
+  url: https://tag-app-delivery.cncf.io/whitepapers/platforms/
+  source: cncf
+  category: Platform Engineering
+  tags: [platform-engineering]
+  note: Vendor-neutral definition of an internal platform and the capabilities it should offer.
+- id: mitre-attack-iaas
+  title: MITRE ATT&CK Cloud (IaaS) matrix
+  url: https://attack.mitre.org/matrices/enterprise/cloud/iaas/
+  source: other
+  category: Security
+  tags: [security, aws]
+  note: Attacker techniques mapped to cloud infrastructure. Useful for threat modelling and detection coverage reviews.

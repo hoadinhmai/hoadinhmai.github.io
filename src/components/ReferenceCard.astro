@@ -1,0 +1,37 @@
+---
+import TagPill from './TagPill.astro';
+
+interface Props {
+  title: string;
+  url: string;
+  source: string;
+  note: string;
+  tags: string[];
+}
+const { title, url, source, note, tags } = Astro.props;
+---
+
+<article class="card" style="margin-bottom:1rem;">
+  <h3 class="ref-title" style="font-size:1.1rem;">
+    <a href={url} target="_blank" rel="noopener">{title} ↗</a>
+  </h3>
+  <p style="color:var(--muted);margin-top:0.35rem;">{note}</p>
+  <p style="margin-top:0.6rem;">
+    <span class="mono source">{source}</span>
+    {tags.map((t) => <TagPill tag={t} />)}
+  </p>
+</article>
+
+<style>
+  .ref-title a { color: var(--ink); text-decoration: none; transition: color 0.15s ease; }
+  .ref-title a:hover { color: var(--accent); }
+  .source {
+    display: inline-block;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.05rem 0.45rem;
+    margin-right: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+</style>

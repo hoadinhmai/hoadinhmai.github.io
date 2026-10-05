@@ -35,3 +35,17 @@ describe('getAllTags', () => {
     ]);
   });
 });
+
+describe('getAllTags with references', () => {
+  it('counts tags from items without a draft flag', () => {
+    const ref = (tags: string[]) => ({ data: { tags } });
+    const result = getAllTags([
+      post('a', '2026-01-01', false, ['aws']),
+      ref(['aws', 'landing-zone']),
+    ]);
+    expect(result).toEqual([
+      { tag: 'aws', count: 2 },
+      { tag: 'landing-zone', count: 1 },
+    ]);
+  });
+});

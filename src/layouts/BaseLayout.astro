@@ -53,7 +53,11 @@ const imageUrl = new URL(image, Astro.site);
     <div class="wrap">
       <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;">
         <a href="/" class="mono" style="text-decoration:none;color:var(--muted);">hoamai.click</a>
-        <ThemeToggle />
+        <nav class="mono" style="display:flex;align-items:center;gap:1.25rem;">
+          <a href="/blog" style="color:var(--muted);text-decoration:none;">writing</a>
+          <a href="/references" style="color:var(--muted);text-decoration:none;">references</a>
+          <ThemeToggle />
+        </nav>
       </header>
       <main>
         <slot />

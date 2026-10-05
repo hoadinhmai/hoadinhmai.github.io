@@ -1,5 +1,5 @@
 import { defineCollection, z } from 'astro:content';
-import { glob } from 'astro/loaders';
+import { file, glob } from 'astro/loaders';
 
 const blog = defineCollection({
   loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/blog' }),
@@ -12,4 +12,16 @@ const blog = defineCollection({
   }),
 });
 
-export const collections = { blog };
+const references = defineCollection({
+  loader: file('src/content/references.yaml'),
+  schema: z.object({
+    title: z.string(),
+    url: z.string().url(),
+    source: z.enum(['github', 'aws', 'anthropic', 'azure', 'gcp', 'cncf', 'vendor', 'other']),
+    category: z.string(),
+    tags: z.array(z.string()).default([]),
+    note: z.string(),
+  }),
+});
+
+export const collections = { blog, references };

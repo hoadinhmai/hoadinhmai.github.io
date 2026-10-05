@@ -19,11 +19,15 @@ export function sortByDateDesc<T extends PostLike>(posts: T[]): T[] {
   );
 }
 
-/** Unique tags across published posts, sorted by count desc then name asc. */
-export function getAllTags(posts: PostLike[]): { tag: string; count: number }[] {
+export interface TaggedLike {
+  data: { tags: string[]; draft?: boolean };
+}
+
+/** Unique tags across non-draft items (posts, references), sorted by count desc then name asc. */
+export function getAllTags(items: TaggedLike[]): { tag: string; count: number }[] {
   const counts = new Map<string, number>();
-  for (const post of filterPublished(posts)) {
-    for (const tag of post.data.tags) {
+  for (const item of items.filter((i) => !i.data.draft)) {
+    for (const tag of item.data.tags) {
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
   }

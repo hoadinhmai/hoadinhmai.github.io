@@ -4,7 +4,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import TagPill from '../../components/TagPill.astro';
 import { getAllTags } from '../../utils/posts';
 
-const tags = getAllTags(await getCollection('blog'));
+const tags = getAllTags([...(await getCollection('blog')), ...(await getCollection('references'))]);
 ---
 
 <BaseLayout title="Tags | Hoa Mai">

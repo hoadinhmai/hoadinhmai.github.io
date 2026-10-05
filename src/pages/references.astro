@@ -1,0 +1,20 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ReferenceCard from '../components/ReferenceCard.astro';
+
+const refs = await getCollection('references');
+const byCategory = Map.groupBy(refs, (r) => r.data.category);
+const categories = [...byCategory.keys()].sort();
+---
+
+<BaseLayout title="References | Hoa Mai" description="Reference architectures and best practices worth bookmarking.">
+  <h1 style="font-size:2rem;margin-bottom:0.5rem;">References</h1>
+  <p style="color:var(--muted);margin-bottom:2rem;">Reference architectures and best practices I keep coming back to.</p>
+  {categories.map((category) => (
+    <section style="margin-bottom:2.5rem;">
+      <h2 class="mono" style="font-size:0.8rem;letter-spacing:0.08em;color:var(--faint);text-transform:uppercase;margin-bottom:1rem;">{category}</h2>
+      {byCategory.get(category)!.map((ref) => <ReferenceCard {...ref.data} />)}
+    </section>
+  ))}
+</BaseLayout>

@@ -2,25 +2,31 @@
 import { getCollection } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PostCard from '../../components/PostCard.astro';
+import ReferenceCard from '../../components/ReferenceCard.astro';
 import { filterPublished, sortByDateDesc, getAllTags } from '../../utils/posts';
 
 export async function getStaticPaths() {
   const published = filterPublished(await getCollection('blog'));
-  return getAllTags(published).map(({ tag }) => ({
+  const refs = await getCollection('references');
+  return getAllTags([...published, ...refs]).map(({ tag }) => ({
     params: { tag },
     props: {
       tag,
       posts: sortByDateDesc(published.filter((p) => p.data.tags.includes(tag))),
+      refs: refs.filter((r) => r.data.tags.includes(tag)),
     },
   }));
 }
 
-const { tag, posts } = Astro.props;
+const { tag, posts, refs } = Astro.props;
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 ---
 
 <BaseLayout title={`#${tag} | Hoa Mai`}>
   <h1 style="font-size:2rem;margin-bottom:0.5rem;">#{tag}</h1>
-  <p class="mono" style="margin-bottom:2rem;">{posts.length} post{posts.length === 1 ? '' : 's'}</p>
+  <p class="mono" style="margin-bottom:2rem;">
+    {[posts.length > 0 && plural(posts.length, 'post'), refs.length > 0 && plural(refs.length, 'reference')].filter(Boolean).join(' · ')}
+  </p>
   {posts.map((post) => (
     <PostCard
       slug={post.id}
@@ -30,5 +36,11 @@ const { tag, posts } = Astro.props;
       tags={post.data.tags}
     />
   ))}
+  {refs.length > 0 && (
+    <section style="margin-top:2rem;">
+      <h2 class="mono" style="font-size:0.8rem;letter-spacing:0.08em;color:var(--faint);text-transform:uppercase;margin-bottom:1rem;">References</h2>
+      {refs.map((ref) => <ReferenceCard {...ref.data} />)}
+    </section>
+  )}
   <p><a href="/tags" class="mono">← All tags</a></p>
 </BaseLayout>
