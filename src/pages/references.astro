@@ -4,7 +4,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import ReferenceCard from '../components/ReferenceCard.astro';
 
 const refs = await getCollection('references');
-const byCategory = Map.groupBy(refs, (r) => r.data.category);
+// Not Map.groupBy: CI builds on Node 20, which lacks it.
+const byCategory = new Map<string, typeof refs>();
+for (const ref of refs) {
+  byCategory.set(ref.data.category, [...(byCategory.get(ref.data.category) ?? []), ref]);
+}
 const categories = [...byCategory.keys()].sort();
 ---
 
