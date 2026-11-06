@@ -1,0 +1,113 @@
+---
+title: "Lambda Runtime Upgrades Are a Migration That Never Ends"
+description: "Seven Lambda runtimes hit their update block on the same day in 2027, and most of the functions on them belong to someone else. Why runtime currency lands on the platform team, and how to make it routine work."
+pubDate: 2026-11-07
+tags: ["aws", "lambda", "platform-engineering", "leadership", "migration"]
+draft: false
+---
+
+On 31 August 2027, Lambda blocks code and configuration updates for functions on seven runtimes on the same day: `nodejs22.x`, `python3.11`, `java8.al2`, `java11`, `java17`, `dotnet8`, and `ruby3.3`. Those functions keep running. Nobody can ship a fix to them without changing the runtime in the same deployment.
+
+A platform team inherits that date for every function in the estate. Most of those functions belong to other teams, and none of their owners have the upgrade on their roadmap.
+
+It's the same problem as the [3,000-pipeline ETL migration](/blog/etl-platform-migration-3000-pipelines/), with one difference that makes it harder to fund: it comes back every year.
+
+## The lifecycle AWS publishes
+
+AWS documents a fixed sequence for every managed runtime. The dates move per runtime, but the phases don't:
+
+| Phase | When | What changes |
+|---|---|---|
+| Deprecation notice | At least 180 days before | Email to the account's primary contact, Health Dashboard, Trusted Advisor |
+| Deprecation | Deprecation date | No more security patches, no technical support, no create or update in the console |
+| Block function create | At least 30 days after | New functions on the runtime are rejected |
+| Block function update | At least 60 days after | Code and configuration updates are rejected, except a change to a supported runtime |
+
+Deprecated functions keep invoking indefinitely, and AWS says so explicitly. Nothing breaks on deprecation day, so nothing gets prioritised on deprecation day.
+
+The date that matters is the update block. After it, the only way to change a function is to upgrade its runtime in the same deployment, which means the next urgent fix during an incident becomes an unplanned runtime migration.
+
+## Why the cadence never lets up
+
+Lambda deprecates a runtime when its language or operating system reaches end of community support. Each runtime family runs on its own upstream calendar, so an estate with several languages has several clocks. From the current schedule, the next twelve months look like this:
+
+```text
+2026-11-10  dotnet8 deprecated
+2027-03-31  ruby3.3 deprecated
+2027-04-30  nodejs22.x deprecated
+2027-06-30  python3.11, java8.al2, java11, java17 deprecated
+2027-08-31  update block for all of the above
+```
+
+Amazon Linux 2 adds a second clock. AL2 reached end of life on 30 June 2026, and Lambda is patching critical AL2 security issues in those runtimes only until their own deprecation dates. `java8.al2`, `java11`, and `java17` have AL2023 replacements (`java8.al2023` and so on) for teams that can't move Java version yet.
+
+New versions keep arriving on the other side. AWS lists Node.js 26 and Python 3.15 as targeted for November 2026, and each one starts the countdown for whatever is two versions behind it.
+
+## Why it lands on the platform team
+
+The upgrade itself is often a one-line change to `Runtime`. The cost is in everything around that line.
+
+Ownership is split. The platform team sees the deadline, owns the account-level notifications, and answers to security for unpatched runtimes. The application team owns the code, the dependencies, and the tests that would prove the upgrade safe. The deadline and the ability to act on it sit in different teams.
+
+The notifications go to the wrong place. The deprecation email goes to the account's primary contact, which in a multi-account organisation is rarely the team that owns the function, and it lists only `$LATEST` versions. Trusted Advisor's `AWS Lambda Functions Using Deprecated Runtimes` check includes published versions, but someone still has to read it in every account. Functions deployed as container images get no deprecation notification at all; AWS's shared responsibility table says so plainly.
+
+The breakage is rarely in the runtime itself. A language major version changes default behaviour, removes deprecated APIs, or shifts the bundled AWS SDK. Native dependencies compiled against one Amazon Linux release fail on the next. A function with no commits for three years usually has no working build, no tests, and often no owner.
+
+Each upgrade is small. A few hundred of them, spread across dozens of teams and each needing its own validation, add up to a migration program that nobody budgeted for.
+
+## Inventory, across every account
+
+The minimum useful inventory is every function, every version, and its runtime, across the organisation. Per account, the Lambda API gives you this directly:
+
+```sh
+aws lambda list-functions --function-version ALL \
+  --query "Functions[].[FunctionName,Version,Runtime,PackageType]" \
+  --output text
+```
+
+Without `--function-version ALL`, only `$LATEST` comes back, which repeats the blind spot in the deprecation email. `PackageType` separates zip functions from container images, which need a different check against the base image they were built from.
+
+Run it across accounts from a central role, or use an AWS Config aggregator, and store the result with an owner tag next to each function. Functions with no owner tag are the first thing to chase.
+
+## A standing runtime policy
+
+The teams that cope with this stop treating each deprecation as a separate emergency. They set a policy once and measure the estate against it.
+
+A workable policy has three parts: a supported set of runtimes per language, usually the newest two; a window after a new runtime ships in which new functions must use it; and a trigger date, well before AWS's deprecation date, after which a function on an old runtime becomes a tracked finding with a named owner.
+
+Sequence the upgrades the way any migration should be sequenced. Move the functions that are cheap to validate first, record what broke for that language version, and publish it, so the fix patterns exist by the time the critical functions move. Lambda versions and aliases give each production cutover a rollback, until the update block removes it.
+
+## Container images
+
+Packaging functions as container images looks like a way out. The runtime lives inside the image, so Lambda has no runtime identifier to block, and the AWS runtime table shows container-only `dotnet9` with no block-create or block-update date scheduled. What you get in exchange is a deadline you have to enforce yourself.
+
+Managed runtimes get AWS's security patches automatically by default. A container image gets nothing until someone rebuilds it from a newer base image and redeploys. Lambda resolves the image tag to a digest at deploy time, so pushing a new image to the same tag changes nothing for a running function. And because of the notification gap above, a function on an end-of-life base image keeps running, unpatched, until a scanner or an auditor finds it.
+
+The language upgrade doesn't go anywhere either. Node.js 22 reaches end of upstream support however the function is packaged, and the code, dependency, and testing work is identical.
+
+What containers do give a platform team is one useful lever: a golden base image per language that every function builds from. It only pays off with the machinery around it:
+
+- A base image pipeline that rebuilds on a fixed schedule and on upstream security releases.
+- Automated rebuild and redeploy of every function built on that image.
+- Image scanning that alerts on end-of-life language versions as well as CVEs.
+- An inventory that records which base image and digest each function is running.
+
+Without that machinery, moving to containers swaps a visible problem for an invisible one.
+
+## Making each upgrade cheaper
+
+A platform team can't do every upgrade itself, and shouldn't try. It can make each one cheaper for whoever owns the code.
+
+Centralise what repeats. Shared deployment templates that take the runtime as one parameter, shared layers or base images built on the current runtime, and a CI check that fails a build on a runtime outside the supported set all shrink the next upgrade.
+
+Bundle the AWS SDK with the function rather than relying on the version in the runtime. AWS recommends this for backward compatibility during runtime updates, and it removes one of the more common surprises when the runtime moves.
+
+Choose the runtime management mode deliberately. The default `Auto` mode applies AWS's minor patches without a deploy. `Function update` and `Manual` give more control over patch-level changes, and in exchange the patching becomes your responsibility under the shared responsibility model.
+
+## Getting ready for August 2027
+
+The calendar is already set, so the useful question is what to have in place before 31 August 2027.
+
+Build the inventory first, with container images included explicitly, and put the update-block dates in the team calendar rather than the deprecation dates. Pull Health Dashboard and Trusted Advisor findings into the backlog the owning teams already work from, so the signal stops dying in the primary contact's inbox. Publish the supported-runtime policy with its lead time, run a first wave on low-risk functions, and write down what broke.
+
+Then budget for it every year. Runtime upgrades are as predictable as certificate renewals, and they cost a lot less when they're planned like them.

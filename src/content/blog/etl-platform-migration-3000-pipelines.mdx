@@ -1,28 +1,24 @@
 ---
 title: "Migrating 3,000 Business-Critical ETL Pipelines One Environment at a Time"
-description: "Upgrading an in-house orchestration platform underneath 3,000 business-critical pipelines is a risk problem before it is a technical one. Risk-based sequencing and environment-by-environment evidence are what let the most critical workloads move last, and safely."
+description: "How we moved 3,000 pipelines onto a new version of an in-house orchestration platform: small waves first, an agreed question for every environment, and the most critical workloads held back until the process had earned trust."
 pubDate: 2026-11-03
 tags: ["platform-engineering", "leadership", "data-engineering", "migration"]
 draft: false
 ---
 
-Three thousand ETL pipelines run on an in-house orchestration platform, and the platform needs to move to a new version. Every one of those pipelines feeds something: a report, a downstream job, a reconciliation, a decision someone makes on Monday morning. None of their owners asked for the upgrade.
+We had 3,000 ETL pipelines on an in-house orchestration platform, and the platform needed to move to a new version. Each pipeline fed something: a report, a downstream job, a reconciliation, a number someone looked at on Monday morning. None of their owners had asked for the upgrade.
 
-The technology change was hard. Keeping the people behind 3,000 workloads confident while those workloads changed underneath them was harder.
+The platform change was hard. Keeping the people behind those pipelines confident while their workloads changed underneath them was harder.
 
-## A pipeline count is a dependency count
+## What 3,000 pipelines means
 
-3,000 pipelines reads like an inventory number. Each pipeline carries upstream sources, downstream consumers, a schedule someone depends on, and an expectation about when data lands and what happens when it doesn't.
+The count undersells it. Each pipeline has upstream sources, downstream consumers, a schedule that someone depends on, and an expectation about when the data lands and what happens when it doesn't. Many of those expectations were never written down. They lived with the teams consuming the data, and we found them when a load ran late or a number moved.
 
-Many of those expectations are undocumented. They live with the teams who consume the data, and they surface when a load runs late or a number changes.
+So the upgrade was less a deployment than a change program across every team that touched the data.
 
-At that scale, a platform upgrade stops being a deployment exercise. It becomes a change programme across every team that touches the data.
+## What changed between versions
 
-## Why the upgrade itself was hard
-
-An in-house platform has no vendor migration guide. The differences between versions are whatever the platform changed, and pipelines built on the old version encode assumptions about behaviour that nobody wrote down.
-
-The risk categories will be familiar to anyone who has moved orchestration workloads:
+An in-house platform has no vendor migration guide. The differences between versions were whatever our platform had changed, and pipelines built on the old version carried assumptions nobody had recorded. These are the areas we had to check:
 
 | Category | What can change between versions |
 |---|---|
@@ -33,15 +29,13 @@ The risk categories will be familiar to anyone who has moved orchestration workl
 | Data correctness | Whether the same inputs still produce the same outputs |
 | Observability | Whether existing alerts, logs, and runbooks still point at the right signals |
 
-Treat the table as the questions every pipeline has to answer. Some pipelines trip none of them. Some trip several at once, and they are rarely the ones you expect.
+Most pipelines hit none of these. Some hit several at once, and they were rarely the ones we expected.
 
-## Why a big-bang cutover was off the table
+## Moving in waves
 
-A single cutover puts every unknown into production on the same night. When something fails, there is no way to separate a platform defect from a pipeline-specific quirk, and no earlier evidence to reason from.
+A single cutover would have put every unknown into production on the same night. If something failed, we'd have had no way to separate a platform defect from a pipeline-specific quirk, and no earlier results to reason from. It would also have asked every owner to accept the full risk on day one with nothing to base that on.
 
-It also asks every stakeholder to accept the full risk on day one, with nothing to base that acceptance on.
-
-The alternative is progressive migration: move a group, validate it, learn from it, fix the process, then move the next group.
+We migrated progressively instead: move a group, validate it, learn from it, fix the process, then move the next, slightly riskier group.
 
 ```text
 lower-risk workloads
@@ -52,28 +46,26 @@ lower-risk workloads
   -> most critical workloads
 ```
 
-Each loop produces two things. Evidence that the new platform behaves correctly, and a migration process slightly better than the one before.
+Every wave gave us evidence that the new platform behaved, and a migration process a little better than the one before it.
 
-## Sequencing is a risk control
+## Choosing the order
 
-The order in which workloads move is itself a risk-control mechanism. Getting it right matters as much as any technical fix.
+The order turned out to be one of our main risk controls. We placed each pipeline using six factors:
 
-These factors decide where a pipeline sits in the sequence:
+- **Criticality**: what breaks for the business if it's late or wrong.
+- **Dependencies**: how many pipelines and consumers sit downstream.
+- **Complexity**: how much of the platform's behaviour it relies on.
+- **Testability**: whether we could check correctness with confidence before production.
+- **Operational maturity**: whether the owning team could support and diagnose it.
+- **Known migration risk**: whether it used features we knew differed between versions.
 
-- **Criticality**: what breaks for the business if this pipeline is late or wrong.
-- **Dependencies**: how many pipelines and consumers sit downstream of it.
-- **Complexity**: how much of the platform's behaviour the pipeline relies on.
-- **Testability**: whether correctness can be checked with confidence before production.
-- **Operational maturity**: whether the owning team can support and diagnose it.
-- **Known migration risk**: whether it uses features known to differ between versions.
+Early waves were low on criticality and high on testability, so they were cheap to get wrong and easy to prove right. That made them the best place to find out what our process couldn't handle yet. Dependencies then constrained everything else, because you can't move a pipeline without knowing what feeds it and what it feeds, and the waves ended up forming around dependency boundaries as much as around risk.
 
-Early waves favour pipelines that are low on criticality and high on testability. They are cheap to get wrong and easy to prove right, which makes them the best place to find out what the migration process can't handle yet.
+The most critical pipelines went last. That can look like avoidance. By the time those pipelines moved, the earlier waves had already surfaced the compatibility issues, exposed the gaps in our testing, and made the new platform's failure modes familiar. The critical workloads still carried the most risk. What had changed was how much we knew about it.
 
-Dependencies constrain the order further. Moving a pipeline means knowing what feeds it and what it feeds, so waves form around dependency boundaries as much as around risk.
+## A question for each environment
 
-## Each environment answers a different question
-
-Promoting a workload through environments is often treated as a formality. In a migration like this, each environment exists to answer a specific question, and a workload doesn't advance until that question has an answer.
+Promotion through environments is often a formality. We gave each environment one question to answer, and a pipeline didn't advance until it had the answer.
 
 ```text
 development      integration / test       pre-production           production
@@ -84,17 +76,13 @@ Does it run?     Is the output correct?   Does it behave under     Can it be ope
                                           performance acceptable?
 ```
 
-Environment names vary between organisations. The progression holds: answer the cheap questions first, where failure costs little, and the expensive questions last, with the most evidence behind them.
+Your environment names will differ. The order is the point: cheap questions first, where failure costs little, and expensive ones last, with the most evidence behind them. A pipeline running cleanly in development had proven it parses and executes, and nothing more.
 
-A pipeline that runs cleanly in development has proven that it parses and executes. Correctness, dependency behaviour, performance, and supportability each need their own evidence, and each environment is where one layer of that evidence gets gathered.
+It also changes what a defect means. Finding one in a lower environment is the process doing its job.
 
-This framing changes what a failure means. A defect found in a lower environment is the process working. The same defect found in production is the process failing.
+## Evidence that other people can see
 
-## Testing builds confidence as well as evidence
-
-Testing served two purposes. The obvious one was technical validation. The less obvious one was giving stakeholders something concrete to base a decision on.
-
-A test result that stays inside the migration team builds no confidence anywhere else. The loop that matters looks like this:
+Testing did two jobs. It validated the technology, and it gave owners something concrete to decide on. The second job only works if the results leave the migration team, so we published them:
 
 ```text
 test -> observe -> find defects -> improve the migration approach
@@ -102,11 +90,7 @@ test -> observe -> find defects -> improve the migration approach
      -> earn agreement for the next, riskier group
 ```
 
-Evidence from early waves carries much of the weight for later ones. When an owner asks "how do we know this will work for our pipelines?", the answer can point to comparable workloads that have already moved, what went wrong with them, and what changed as a result.
-
-## Different stakeholders carry different risks
-
-"Stakeholders" is too coarse a word to plan with. Each group is exposed to a different failure and needs a different kind of evidence. The right-hand column below describes the kind of evidence, not a fixed checklist.
+"Stakeholders" was too coarse a word to plan with. Each group was exposed to a different failure and needed a different kind of evidence:
 
 | Stakeholder | The question they are asking | Evidence that answers it |
 |---|---|---|
@@ -116,37 +100,18 @@ Evidence from early waves carries much of the weight for later ones. When an own
 | Business stakeholders | Will our critical processes keep running? | A track record on comparable workloads, a recovery plan |
 | Leadership | Is risk going down, and are we on track? | Waves completed, defects closed, what remains and why |
 
-Translating progress into each group's terms is part of managing the risk. A defect count means something to engineers. A data owner needs to know which of their pipelines are affected and what that means for the data they rely on.
+A defect count means something to an engineer. A data owner wants to know which of their pipelines are affected and what that does to the data they rely on, so we reported in those terms.
 
-## Closing the confidence gap
+The tension we kept running into was predictable. We'd decide something was ready because we were close to the evidence, and the people who owned the risk hadn't seen enough to agree. Both positions were reasonable. Pushing past that with authority would have cost more trust than it saved time, so we closed the gap with more of the same: repeated clean waves, open reporting of what went wrong, a named owner for each residual risk, and progression criteria agreed before the go/no-go meeting. Once the criteria were agreed in advance, the meeting became a check against them and stopped being a negotiation.
 
-A predictable tension shows up in a programme like this. The migration team, close to the evidence, decides something is ready. The people who own the risk haven't seen enough to agree.
+## Leading it without owning it
 
-Both positions are reasonable. A successful test doesn't mean everyone is comfortable moving their most critical workload, and pushing past that discomfort with authority costs more trust than it saves time.
+I had almost no formal authority over any of this. The pipelines belonged to other teams, and the risk sat with their owners. What moved things forward was structure people could push back on: a sequencing model they could challenge, criteria they had signed up to, and evidence that made each decision a little easier than the last.
 
-The gap closes with evidence: repeated successful waves, open reporting of what went wrong, clear ownership of each residual risk, and agreement on what has to be true before the next step. When progression criteria are agreed in advance, a go/no-go decision becomes a check against those criteria instead of a negotiation.
+Day to day, my job was working out what had changed between platform versions, where those changes put pipelines at risk, coordinating testing across teams and environments, chasing issues and exceptions through to resolution, and feeding each lesson into the next wave.
 
-## The most critical workloads went last
+## Before your first wave
 
-Leaving the most critical pipelines until late can look like avoidance. Those workloads deserve the most mature version of the migration process, and that version doesn't exist at the start.
+If you're facing one of these, the work that pays off most happens before anything moves. Map the dependency graph before you build the pipeline list, since what feeds what sets the order you can migrate in. Write down the question each environment has to answer; an environment without one tells you nothing when a workload passes through it. Pick a first wave for what it will teach you, and expect it to expose gaps.
 
-Earlier waves are where compatibility issues surface, testing gaps show up, failure modes on the new platform become familiar, and validation patterns earn stakeholder trust. The process used for the critical workloads had been shaped by every wave that came before it.
-
-The critical workloads still carried the most risk. What had changed was how much was known about that risk, and how much evidence the people accepting it had in front of them.
-
-## Leading the migration, not only running it
-
-Migrating pipelines is execution. Working out how 3,000 pipelines can move safely, in what order, on what evidence, and with whose agreement, is a different job.
-
-Most of that job comes with no formal authority. The pipelines belonged to other teams and the risk sat with their owners. What moved the programme forward was structure: a sequencing model people could challenge, progression criteria people had agreed to, and evidence that made each decision easier than the last.
-
-Day to day, that meant understanding what had changed between platform versions, identifying where those changes put pipelines at risk, coordinating testing across teams and environments, managing issues and exceptions through to resolution, and feeding each lesson back into the process for the next wave.
-
-## Where to start if you're facing one
-
-1. **Map the dependency graph before the pipeline list.** The order you can migrate in is set by what feeds what, and you can't sequence by risk until you know it.
-2. **Write down what each environment must prove.** If an environment has no question attached, a workload passing through it tells you nothing.
-3. **Choose the first wave for learning.** Pick pipelines that are low-criticality and easy to validate, and expect them to expose gaps in your process.
-4. **Map each stakeholder group to the risk it carries.** Then decide what evidence answers that risk, and report in those terms.
-5. **Agree progression criteria before the first go/no-go.** Criteria agreed under pressure turn into negotiations.
-6. **Hold the critical workloads back until the process has a track record.** A platform upgrade is done when the organisation can move its most important workloads with confidence, which is later than the day the new version is deployed.
+Then agree the progression criteria with the owners while nobody is under pressure. Criteria written the night before a cutover turn into a negotiation. And keep the critical workloads back until the process has a track record. The upgrade is finished when the organisation can move its most important pipelines with confidence, which is well after the day the new version goes live.
